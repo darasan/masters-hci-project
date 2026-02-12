@@ -36,6 +36,8 @@ public class Spawn_Images : MonoBehaviour
    public static List <float> curves_array= new List <float>();
    private bool changed_scene;
 
+   private GameObject shapePanel;
+
 
    void Start()
    {
@@ -44,6 +46,10 @@ public class Spawn_Images : MonoBehaviour
             distanciaMin = Options_Menu.ViewField;
         }
       real_position=0.0f;
+
+      //Get prompt panel reference
+      shapePanel = GameObject.FindGameObjectWithTag("DetectShapePanel");
+      shapePanel.SetActive(false);
    }
 
    void FixedUpdate ()
@@ -58,10 +64,17 @@ public class Spawn_Images : MonoBehaviour
   // direita =-1
   //esquerda = 1
 
+
+  //center = 0
+  //right = -1
+  //left = 1
+
    void Spawn_signal(){
       distancia = Vector3.Distance(transform.position, player.transform.position); 
      
-      if (distancia <= distanciaMin) {
+      if (distancia <= distanciaMin) { //"60m before sign, then turns on? test"
+
+         //Debug.Log("spawn signal"); //but does all the time after first one
  
          car_position = Car_Movement.position_z - offset;
 
@@ -78,9 +91,10 @@ public class Spawn_Images : MonoBehaviour
             Vector3 left_side__right= new Vector3 ( transform.position.x - 0.1f, transform.position.y, transform.position.z - 20 -3);
 
             if(car_position > layer_3 ){
-               Instat_NaoPassar(right_side__left, left_side__left);
+               Instat_NaoPassar(right_side__left, left_side__left); //signal_nao_passar(Clone) in Inspector is an X (no pass). Passar is the arrow to pass in this lane. Each separate clone for each sign (seems dumb). Add keeps spawning in loop
+              // "whatever, dont try to fix everything. just want to trigger prompts to driver for pin pad etc, get this working, commit and then clean rest."
 
-               aleatorio= Random.Range(1,5);
+               aleatorio= Random.Range(1,5); //"randomly set lane?"
 
               if(aleatorio<3 && (center_left>0 || center_right>0 )&& left_center>0)
                {
@@ -154,7 +168,10 @@ public class Spawn_Images : MonoBehaviour
                }
             }
             enterd=true;
-         }
+         } //end enterd (lane selected?)
+
+         //Test - show panel each time
+         shapePanel.SetActive(true);
       }
    }
 
