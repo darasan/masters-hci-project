@@ -1,6 +1,7 @@
 
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using UnityEngine;
 
 public class Spawn_Images : MonoBehaviour
@@ -19,7 +20,7 @@ public class Spawn_Images : MonoBehaviour
    private float distancia;
    private float offset= 500.01f;
    private float car_position=0;
-   private bool enterd=false;
+   public bool enterd=false;
 
    public float layer_2 = -4.166666667f;
    public float layer_3 = 4.166666667f;
@@ -36,8 +37,9 @@ public class Spawn_Images : MonoBehaviour
    public static List <float> curves_array= new List <float>();
    private bool changed_scene;
 
-   private GameObject shapePanel;
+   //public GameObject shapePanelScript; can just ref class directly? => Yes, if func is public static. Gives global storage class, no need to create instance
 
+  // [SerializeField] private ShapePanel shapepanel;// "no point doing this cos spawning multiple inst so mult panels. will have to manage many. want panel as single instance, like UI. find way to get signal from this code, when sign display is triggered"
 
    void Start()
    {
@@ -47,9 +49,8 @@ public class Spawn_Images : MonoBehaviour
         }
       real_position=0.0f;
 
-      //Get prompt panel reference
-      shapePanel = GameObject.FindGameObjectWithTag("DetectShapePanel");
-      shapePanel.SetActive(false);
+      //shapepanel.DisablePanel();
+      //UnityEngine.Debug.Log("Start");
    }
 
    void FixedUpdate ()
@@ -74,7 +75,7 @@ public class Spawn_Images : MonoBehaviour
      
       if (distancia <= distanciaMin) { //"60m before sign, then turns on? test"
 
-         //Debug.Log("spawn signal"); //but does all the time after first one
+         //UnityEngine.Debug.Log("spawn signal"); //but does all the time after first one
  
          car_position = Car_Movement.position_z - offset;
 
@@ -139,7 +140,6 @@ public class Spawn_Images : MonoBehaviour
                   real_position=-1.0f;
                   center_right--;
                   signal_positioning(right_side__right, left_side__right, right_side__left, left_side__left, 1, real_position );
-                  
                }
             }
 
@@ -168,13 +168,20 @@ public class Spawn_Images : MonoBehaviour
                }
             }
             enterd=true;
-         } //end enterd (lane selected?)
 
-         //Test - show panel each time
-         shapePanel.SetActive(true);
+            //trigger panel on
+            //shapepanel.EnablePanel();
+            //StartCoroutine(Wait(3.0f));
+
+         } //end enterd (lane selected?)
       }
    }
 
+    IEnumerator Wait(float delay)
+    {
+      yield return new WaitForSeconds(delay);
+      //shapepanel.DisablePanel();
+    }
 
    private void signal_positioning(Vector3 inst_side1, Vector3 inst_side2, Vector3 Ninst_side1, Vector3 Ninst_side2, int Numb_curves , float RP){
       Instat_Passar(inst_side1, inst_side2);
