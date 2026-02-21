@@ -1,8 +1,12 @@
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 
 public class UIManager : MonoBehaviour
 {
+
+    //public Text distanceLabel;
+    //public float distanceTravelled;
 
     void Awake()
     {
@@ -15,6 +19,8 @@ public class UIManager : MonoBehaviour
     }
     void Update()
     {
+        //Update distance travelled UI
+       // distanceLabel.text = (distanceTravelled + " kms");
        
     }
 

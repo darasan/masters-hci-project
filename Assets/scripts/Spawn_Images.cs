@@ -21,7 +21,7 @@ public class Spawn_Images : MonoBehaviour
    private float car_position=0;
    public bool enterd=false;
 
-   public float layer_2 = -4.166666667f;
+   public float layer_2 = -4.166666667f; //These are the lane Z positions: layer 3 is left lane, layer 2 is right line. 0 is center
    public float layer_3 = 4.166666667f;
    
    public static  int right_left=3;
@@ -70,15 +70,18 @@ public class Spawn_Images : MonoBehaviour
   //left = 1
 
    void Spawn_signal(){
-      distancia = Vector3.Distance(transform.position, player.transform.position); 
+      distancia = Vector3.Distance(transform.position, player.transform.position);  //distancia is dist from car to the sign? transform is the next sign, spawn new and calc dist each time
+     // "debug player pos, relation to road sign distance param. Then update dist % label"
+
+      //Debug.Log("player.transform.position X: " + player.transform.position.x); //starts at -500, same as Tocus
      
       if (distancia <= distanciaMin) { //"60m before sign, then turns on? test"
 
-         //UnityEngine.Debug.Log("spawn signal"); //but does all the time after first one
+         //UnityEngine.Debug.Log("spawn signal"); //but does all the time after first one. yes, called in fixed update above
  
-         car_position = Car_Movement.position_z - offset;
+         car_position = Car_Movement.position_z - offset; //Horizontal car pos - used for lane detection
 
-         if(!enterd){
+         if(!enterd){ //enterd set true when signals set (at end of all below)
             int aleatorio =0;
 
             Vector3 right_side__center = new Vector3 ( transform.position.x - 0.1f, transform.position.y, transform.position.z + 20);
@@ -90,34 +93,43 @@ public class Spawn_Images : MonoBehaviour
             Vector3 right_side__right = new Vector3 ( transform.position.x - 0.1f, transform.position.y, transform.position.z + 20 -3 );
             Vector3 left_side__right= new Vector3 ( transform.position.x - 0.1f, transform.position.y, transform.position.z - 20 -3);
 
+            //Debug.Log("distancia: " + distancia + "distanciaMin: " + distanciaMin + "car_position: " + car_position);
+            
+            //Car on the left side - layer 3 (4.16) is min pos for left lane
             if(car_position > layer_3 ){
                Instat_NaoPassar(right_side__left, left_side__left); //signal_nao_passar(Clone) in Inspector is an X (no pass). Passar is the arrow to pass in this lane. Each separate clone for each sign (seems dumb). Add keeps spawning in loop
               // "whatever, dont try to fix everything. just want to trigger prompts to driver for pin pad etc, get this working, commit and then clean rest."
 
-               aleatorio= Random.Range(1,5); //"randomly set lane?"
+               aleatorio= Random.Range(1,5); //"randomly set lane?" aleatorio means random. Thinks its next lange to change to, chooses one of below randomly
 
               if(aleatorio<3 && (center_left>0 || center_right>0 )&& left_center>0)
                {
                   real_position=0.0f;
                   left_center--;
+
+                  //signal_positioning(Vector3 inst_side1, Vector3 inst_side2, Vector3 Ninst_side1, Vector3 Ninst_side2, int Numb_curves , float RP){
+                  // So (right side On, left side On, right side Off, left side Off)
+                //  Debug.Log("car on left, set sign to X Y X ");
                   signal_positioning(right_side__center, left_side__center, right_side__right, left_side__right, 1, real_position );
                    
                }
-               else if((right_left>0 || right_center>0) && left_right>0) // carro vai do lado esquerdo para o direita
+               else if((right_left>0 || right_center>0) && left_right>0) // carro vai do lado esquerdo para o direita -> car goes from left to right
                {
                   real_position=-1.0f;
                   left_right--;
+                //  Debug.Log("car on left, set sign to X X Y ");
                   signal_positioning(right_side__right, left_side__right, right_side__center, left_side__center, 2, real_position );  
                }
                 
-               else  {
+               else  { //Duplicate of first case! this code...
                   real_position=0.0f;
                   left_center--;
+                 // Debug.Log("car on left, set sign to X Y X again? ");
                   signal_positioning(right_side__center, left_side__center, right_side__right, left_side__right, 1, real_position );
                }
             }
 
-            //carro ta no no centro
+            //carro ta no no centro -> car in the centre
             if( layer_3 >= car_position && car_position > layer_2){
 
                Instat_NaoPassar(right_side__center, left_side__center);
@@ -142,7 +154,7 @@ public class Spawn_Images : MonoBehaviour
                }
             }
 
-            //carro ta no no lado direito
+            //carro ta no no lado direito -> The car is on the right side
             if(layer_2 >= car_position){
                
                Instat_NaoPassar(right_side__right, left_side__right);

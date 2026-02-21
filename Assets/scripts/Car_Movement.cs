@@ -26,13 +26,17 @@ public class Car_Movement : MonoBehaviour{
     public int maxVelocity;
     public float CurrentSpeed=0;
 
-    private float LowestSteerSpeed =47;
+    private float LowestSteerSpeed = 47;
     private float lowSpeedSteerAngel = 37;
     private float heightSpeedSteeringel = 1;
     public bool entrou=true;
 
     [Header("UI")]
     public Text speedLabel; 
+    public Text distanceLabel;
+
+    public float norm_pos_x = 0; //car pos + 500 adjusted for offset
+    public float percent_complete = 0;
 
     private void Start() {
         maxVelocity = Options_Menu.Car_speed; 
@@ -58,6 +62,8 @@ public class Car_Movement : MonoBehaviour{
         if (speedLabel != null){
             speedLabel.text = ((int)CurrentSpeed) + " km/h";
         }
+
+        distanceLabel.text = (norm_pos_x + " meters/3000");
      }
      
    
@@ -78,10 +84,12 @@ public class Car_Movement : MonoBehaviour{
 
         var speedFactor= GetComponent<Rigidbody>().linearVelocity.magnitude/LowestSteerSpeed;
         var currentSteerAngle =Mathf.Lerp(lowSpeedSteerAngel, heightSpeedSteeringel,speedFactor );
-        //currentSteerAngle *=Input.GetAxis("Horizontal");
+        
+        //Kybd control
+        currentSteerAngle *=Input.GetAxis("Horizontal");
 
         //Add wheel
-        currentSteerAngle *=Input.GetAxis("SteeringWheel");
+        //currentSteerAngle *=Input.GetAxis("SteeringWheel");
 
         if(Input.GetKey(KeyCode.Space)){
             currentBreakForce = breakingForce;
@@ -99,6 +107,12 @@ public class Car_Movement : MonoBehaviour{
 
         position_z = transform.position.z;
         position_x=transform.position.x;
+
+        //Debug.Log("Car pos x: " + position_x); //Starts at -500, finishes at 2500. So 3000 total -> Same val as Tocus x position. 
+        //Offset added in SpawnImages, ln 79. Only Z axis though? Dunno why (dont care)
+        norm_pos_x = Mathf.Round(position_x + 480);
+        percent_complete =  Mathf.Round((norm_pos_x/2980) * 100); //subtract 20 offset from both
+        //Debug.Log("Normalised car pos x: " + norm_pos_x + " % complete: " + percent_complete);
     }
 
 

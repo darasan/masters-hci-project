@@ -35,7 +35,7 @@ public class Store_Values : MonoBehaviour
         Real_position= Spawn_Images.real_position;
 
         store_continues = Reset_Level.stop_storage;
-       
+      //  Debug.Log("pos X: " + position_x + "pos Z: " + position_z + "real pos: " + Real_position);       
     }
 
     IEnumerator take_values()
