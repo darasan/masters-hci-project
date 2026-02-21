@@ -1,12 +1,13 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
-
 public class UIManager : MonoBehaviour
 {
 
     //public Text distanceLabel;
     //public float distanceTravelled;
+
+    int val = 150;
 
     void Awake()
     {
@@ -15,7 +16,9 @@ public class UIManager : MonoBehaviour
 
     void Start()
     {
-   
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("StartTest", " " , " ");
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Username: ", "Daire", " ");
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Test value: ", val.ToString(), " ");
     }
     void Update()
     {
