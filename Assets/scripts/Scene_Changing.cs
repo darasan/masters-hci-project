@@ -31,7 +31,7 @@ public class Scene_Changing : MonoBehaviour
 
             if(repetition!= number_of_reps)
             {
-                SceneManager.LoadScene("Lane_chance_tes");
+                SceneManager.LoadScene("LaneChangeTest");
             }
             else
             {
