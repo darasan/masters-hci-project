@@ -1,0 +1,40 @@
+Library/PackageCache/
+Library/
+Assets/Car_Low/
+Assets/materials/
+Assets/ADG_Textures/
+Assets/_TerrainAutoUpgrade/
+Assets/Scenes/Lane_chance_tes/
+Assets/TextMesh Pro/
+Temp/
+Logs/
+obj/
+Assets/_TerrainAutoUpgrade.meta
+Assets/ADG_Textures.meta
+Assets/Car_Low.meta
+Assets/materials.meta
+Assets/New Terrain 1.asset
+Assets/New Terrain 1.asset.meta
+Assets/New Terrain.asset
+Assets/New Terrain.asset.meta
+Assets/NewLayer 1.terrainlayer
+Assets/NewLayer 1.terrainlayer.meta
+Assets/NewLayer 2.terrainlayer
+Assets/NewLayer 2.terrainlayer.meta
+Assets/NewLayer.terrainlayer
+Assets/NewLayer.terrainlayer.meta
+Assembly-CSharp.csproj
+Lane-Change-Test-main.sln
+Lane-Change-Test-main.slnx
+Assets/_Recovery.meta
+.vs/Lane-Change-Test-main/v17/.suo
+.vs/Lane-Change-Test-main/v17/DocumentLayout.backup.json
+.vs/Lane-Change-Test-main/v17/DocumentLayout.json
+.vscode/extensions.json
+.vscode/launch.json
+.vscode/settings.json
+.vsconfig
+Assets/Scenes/Menu/LightingData.asset
+Assets/Scenes/Menu/LightingData.asset.meta
+Assets/Scenes/Menu/ReflectionProbe-0.exr
+Assets/Scenes/Menu/ReflectionProbe-0.exr.meta
