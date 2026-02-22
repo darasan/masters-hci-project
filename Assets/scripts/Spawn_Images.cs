@@ -23,6 +23,15 @@ public class Spawn_Images : MonoBehaviour
 
    public float layer_2 = -4.166666667f; //These are the lane Z positions: layer 3 is left lane, layer 2 is right line. 0 is center
    public float layer_3 = 4.166666667f;
+
+   public enum LanePosition{
+      Left,
+      Center,
+      Right
+   }
+
+   //Current lane of car
+   public static LanePosition currentLane = LanePosition.Center;
    
    public static  int right_left=3;
    public static int right_center=3;
@@ -57,7 +66,26 @@ public class Spawn_Images : MonoBehaviour
       changed_scene = Reset_Level.sceneChanging_in_between;
       verify_variables();
       Spawn_signal();
+      UpdateCurrentLane();      
      
+   }
+
+   
+   void UpdateCurrentLane(){
+
+      car_position = Car_Movement.position_z - offset; //NB same as SpawnSignal - duplicate calc
+
+      if(car_position > layer_3 ){
+         currentLane = LanePosition.Left;
+      }
+
+      else if( layer_3 >= car_position && car_position > layer_2){
+         currentLane = LanePosition.Center;
+      }
+
+      else if(layer_2 >= car_position){
+         currentLane = LanePosition.Right;
+      }
    }
 
   //centro =0
