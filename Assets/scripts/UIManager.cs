@@ -15,6 +15,8 @@ public class UIManager : MonoBehaviour
     private string targetLane;
     private bool inCorrectLane = true;
 
+    [SerializeField] private GameObject detectShapePanel;
+
 
     void Awake()
     {
@@ -45,6 +47,14 @@ public class UIManager : MonoBehaviour
         else{
             currentLaneText.color = redColour;
             inCorrectLane = false;
+        }
+
+        //Keyboard input
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            Debug.Log("Spacebar pressed!");
+            detectShapePanel.SetActive(!detectShapePanel.activeSelf);
+            LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Detect shape prompt: ", detectShapePanel.activeSelf.ToString(), " ");
         }
     }
 

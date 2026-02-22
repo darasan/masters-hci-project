@@ -4104,6 +4104,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::UIManager
   currentLaneText: {fileID: 2145233623}
   targetLaneText: {fileID: 507324842}
+  detectShapePanel: {fileID: 592787709}
 --- !u!1 &1880931200
 GameObject:
   m_ObjectHideFlags: 0
