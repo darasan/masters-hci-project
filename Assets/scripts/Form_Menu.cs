@@ -5,16 +5,33 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using System;
 
+/*
 public class Form_Menu : MonoBehaviour
 {
     public static string Person_ID = "Daire";
+    public static bool autoShowShapePanel = true;
+    public static int shapePanelSeconds = 5;
     public static int rep;
+
+    public static Form_Menu Instance { get; private set; }
+
+    private void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        Instance = this;
+        DontDestroyOnLoad(gameObject); //Will persist between scenes. Create a new GO in top level menu and attach this script as component
+    }
 
     void Start()
     {
-        print("Start Form Menu");
-        print("Person_ID: " + Person_ID);
-        print("Application.dataPath: " + Application.dataPath);
+        Debug.Log("Start Form Menu");
+        Debug.Log("Person_ID: " + Person_ID);
+        Debug.Log("Application.dataPath: " + Application.dataPath);
     }
 
     public void PlayGame()
@@ -42,7 +59,26 @@ public class Form_Menu : MonoBehaviour
         }
         catch(Exception e)
         {
-            print("Error: " +e);
+            Debug.Log("Error: " +e);
+        }
+    }
+
+    public void SetShapePanelAutoShow(bool show)
+    {
+        autoShowShapePanel = show;
+        Debug.Log("SetShapePanelAutoShow: " + autoShowShapePanel);
+    }
+
+    public void SetShapePanelTimeout(string seconds)
+    {
+        if(int.TryParse(seconds, out int shapePanelSeconds)){
+            Debug.Log("SetShapePanelTimeout: " + shapePanelSeconds);
+
+            //write to user settings for test
+            UserSettings.Instance.shapePanelTimeoutSeconds = shapePanelSeconds;
+        }
+        else{
+            Debug.Log("Invalid number");
         }
     }
 
@@ -51,3 +87,4 @@ public class Form_Menu : MonoBehaviour
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex - 1);
     }
 }
+*/

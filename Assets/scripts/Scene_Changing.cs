@@ -16,14 +16,15 @@ public class Scene_Changing : MonoBehaviour
     
     void Start()
     {
-        number_of_reps=Form_Menu.rep;
+        //number_of_reps=Form_Menu.rep;
+        number_of_reps = 0; //TODO rework this if needed
     }
 
     void Update()
     {
         if(!values_stored){
             writeCSV();
-            values_stored=true;
+            values_stored=true; //again...loops
         }
        
         if(Input.GetKeyDown("r")){
@@ -35,7 +36,7 @@ public class Scene_Changing : MonoBehaviour
             }
             else
             {
-                SceneManager.LoadScene("Menu");
+                SceneManager.LoadScene("MainMenu");
             }    
          }
     }
