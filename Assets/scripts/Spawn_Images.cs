@@ -1,10 +1,16 @@
 
+using System;
+using System.IO;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Events;
 
 public class Spawn_Images : MonoBehaviour
 {
+   //Events system
+   public static event Action signalZoneEnteredEvent;
+
    public float distanciaMin = 60f;
    public static float real_curve=0.0f; // passa -1 se tiver na direita , passa 0 se tiver no centro , passa 1 se tiver na esquerda
    public static float real_position=0.0f;
@@ -45,10 +51,6 @@ public class Spawn_Images : MonoBehaviour
    public static List <float> curves_array= new List <float>();
    private bool changed_scene;
 
-   //public GameObject shapePanelScript; can just ref class directly? => Yes, if func is public static. Gives global storage class, no need to create instance
-
-  // [SerializeField] private ShapePanel shapepanel;// "no point doing this cos spawning multiple inst so mult panels. will have to manage many. want panel as single instance, like UI. find way to get signal from this code, when sign display is triggered"
-
    void Start()
    {
       player = GameObject.FindGameObjectWithTag ("Player");
@@ -56,9 +58,6 @@ public class Spawn_Images : MonoBehaviour
             distanciaMin = Options_Menu.ViewField;
         }
       real_position=0.0f;
-
-      //shapepanel.DisablePanel();
-      //UnityEngine.Debug.Log("Start");
    }
 
    void FixedUpdate ()
@@ -92,7 +91,6 @@ public class Spawn_Images : MonoBehaviour
   // direita =-1
   //esquerda = 1
 
-
   //center = 0
   //right = -1
   //left = 1
@@ -107,10 +105,16 @@ public class Spawn_Images : MonoBehaviour
 
          //UnityEngine.Debug.Log("spawn signal"); //but does all the time after first one. yes, called in fixed update above
  
-         car_position = Car_Movement.position_z - offset; //Horizontal car pos - used for lane detection
+         car_position = Car_Movement.position_z - offset; //Horizontal car pos - used for lane detection TODO remove from here? if also use in UpdateCurLane()
 
-         if(!enterd){ //enterd set true when signals set (at end of all below)
+         if(!enterd){ //enterd set true when signals set (at end of all below) =>Not even enterd zone, but entered case. Used in other files also, other local instances. Just remove
+
+            signalZoneEnteredEvent.Invoke(); //send event to UI Manager
+
             int aleatorio =0;
+
+            Debug.Log("Display lane change (enterd)");
+            LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Display lane change", " " , " ");
 
             Vector3 right_side__center = new Vector3 ( transform.position.x - 0.1f, transform.position.y, transform.position.z + 20);
             Vector3 left_side__center= new Vector3 ( transform.position.x - 0.1f, transform.position.y, transform.position.z - 20);
@@ -125,10 +129,11 @@ public class Spawn_Images : MonoBehaviour
             
             //Car on the left side - layer 3 (4.16) is min pos for left lane
             if(car_position > layer_3 ){
+
                Instat_NaoPassar(right_side__left, left_side__left); //signal_nao_passar(Clone) in Inspector is an X (no pass). Passar is the arrow to pass in this lane. Each separate clone for each sign (seems dumb). Add keeps spawning in loop
               // "whatever, dont try to fix everything. just want to trigger prompts to driver for pin pad etc, get this working, commit and then clean rest."
 
-               aleatorio= Random.Range(1,5); //"randomly set lane?" aleatorio means random. Thinks its next lange to change to, chooses one of below randomly
+               aleatorio= UnityEngine.Random.Range(1,5); //"randomly set lane?" aleatorio means random. Thinks its next lange to change to, chooses one of below randomly
 
               if(aleatorio<3 && (center_left>0 || center_right>0 )&& left_center>0)
                {
@@ -161,7 +166,7 @@ public class Spawn_Images : MonoBehaviour
             if( layer_3 >= car_position && car_position > layer_2){
 
                Instat_NaoPassar(right_side__center, left_side__center);
-               aleatorio = Random.Range(1,5);
+               aleatorio = UnityEngine.Random.Range(1,5);
 
                if(aleatorio<3 && (right_left>0 || right_center>0) && center_right>0 ){
                   center_right--;
@@ -186,7 +191,7 @@ public class Spawn_Images : MonoBehaviour
             if(layer_2 >= car_position){
                
                Instat_NaoPassar(right_side__right, left_side__right);
-               aleatorio= Random.Range(1,5);
+               aleatorio= UnityEngine.Random.Range(1,5);
 
                if(aleatorio<3 && (center_left>0 || center_right>0)&& right_center>0  ) {
                   real_position=0.0f;
@@ -207,19 +212,13 @@ public class Spawn_Images : MonoBehaviour
                }
             }
             enterd=true;
-
-            //trigger panel on
-            //shapepanel.EnablePanel();
-            //StartCoroutine(Wait(3.0f));
-
-         } //end enterd (lane selected?)
+         } 
       }
    }
 
     IEnumerator Wait(float delay)
     {
       yield return new WaitForSeconds(delay);
-      //shapepanel.DisablePanel();
     }
 
    private void signal_positioning(Vector3 inst_side1, Vector3 inst_side2, Vector3 Ninst_side1, Vector3 Ninst_side2, int Numb_curves , float RP){

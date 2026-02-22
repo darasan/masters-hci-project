@@ -50,9 +50,8 @@ public class UIManager : MonoBehaviour
         }
 
         //Keyboard input
-        if (Input.GetKeyDown(KeyCode.Space))
-        {
-            Debug.Log("Spacebar pressed!");
+        if (Input.GetKeyDown(KeyCode.Space)){
+            //Debug.Log("Spacebar pressed!");
             detectShapePanel.SetActive(!detectShapePanel.activeSelf);
             LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Detect shape prompt: ", detectShapePanel.activeSelf.ToString(), " ");
         }
@@ -60,8 +59,25 @@ public class UIManager : MonoBehaviour
 
     public void QuitButtonPressed()
     {
-        UnityEngine.Debug.Log("Quit");
+        Debug.Log("Quit");
         SceneManager.LoadScene("Menu");
+    }
+
+    private void signalZoneEntered()
+    {
+        Debug.Log("UIMgr: signalZoneEnteredEvent");
+    }
+
+    void OnEnable()
+    {
+        Debug.Log("OnEnable, subscribe events");
+        Spawn_Images.signalZoneEnteredEvent += signalZoneEntered;
+    }
+
+    void OnDisable()
+    {
+        Debug.Log("OnDisable, unsubscribe events");
+        Spawn_Images.signalZoneEnteredEvent -= signalZoneEntered;
     }
 
 }

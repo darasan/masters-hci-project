@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-//using System.Diagnostics;
 using UnityEngine;
 
 public class Signal_Position : MonoBehaviour
@@ -37,13 +36,13 @@ public class Signal_Position : MonoBehaviour
              create_signals(i);
 
             }  
-            enterd=false;
+            enterd=false; //just uses this to create signals once at startup. Shouldnt be in update loop, but init...no need.
         }
     }
 
 
     void create_signals(int i){
-        int aleatorio = Random.Range(30, 60);
+        int aleatorio = UnityEngine.Random.Range(30, 60); //NB! Random element in distance between signals (30-60 +/-). So not fixed spacing, but just show 60 (or 140?) meters before?
 
         Vector3 vector = new Vector3 (start_position+ i * dist_betwen_sig + aleatorio, 6f, 501 + road_tickness/2);
         Instantiate(plane_prefab_, vector, Z_90);
@@ -53,10 +52,15 @@ public class Signal_Position : MonoBehaviour
 
         vector = new Vector3 (start_position + i * dist_betwen_sig + aleatorio, 6f, 501);
         Instantiate(empty_prefab_script, vector, Z_90);
+
+        //Debug.Log("Created signal at x = " + vector.x);
     }
 
 
     float calc_numb_signals(){
+
+        //Debug.Log("calc_numb_signals");
+
         cube_lenght=Change_Road.lenght;
         start_position = GameObject.FindGameObjectWithTag("road").transform.position.x;
         start_position -= cube_lenght -200;
