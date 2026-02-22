@@ -25,9 +25,9 @@ public class Spawn_Images : MonoBehaviour
    public float layer_3 = 4.166666667f;
 
    public enum LanePosition{
-      Left,
+      Right = -1,
       Center,
-      Right
+      Left
    }
 
    //Current lane of car
