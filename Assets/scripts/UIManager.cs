@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using System.Collections;
 
 
 public class UIManager : MonoBehaviour
@@ -50,7 +51,7 @@ public class UIManager : MonoBehaviour
         }
 
         //Keyboard input
-        if (Input.GetKeyDown(KeyCode.Space)){
+        if(Input.GetKeyDown(KeyCode.Space)){
             //Debug.Log("Spacebar pressed!");
             detectShapePanel.SetActive(!detectShapePanel.activeSelf);
             LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Detect shape prompt: ", detectShapePanel.activeSelf.ToString(), " ");
@@ -60,12 +61,23 @@ public class UIManager : MonoBehaviour
     public void QuitButtonPressed()
     {
         Debug.Log("Quit");
-        SceneManager.LoadScene("Menu");
+        SceneManager.LoadScene("MainMenu");
+    }
+
+    IEnumerator DisplayShapePanelForTime(float seconds)
+    {
+        Debug.Log("Display shape panel for " + seconds + " seconds");
+        detectShapePanel.SetActive(true);
+        yield return new WaitForSeconds((float)seconds);
+        detectShapePanel.SetActive(false);
     }
 
     private void signalZoneEntered()
     {
-        Debug.Log("UIMgr: signalZoneEnteredEvent");
+        //Debug.Log("UIMgr: signalZoneEnteredEvent");
+        if(UserSettings.Instance.autoShowShapePanel){
+            StartCoroutine(DisplayShapePanelForTime(UserSettings.Instance.shapePanelSeconds));   
+        }
     }
 
     void OnEnable()
