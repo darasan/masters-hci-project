@@ -26,8 +26,7 @@ public class UIManager : MonoBehaviour
 
     void Start()
     {
-        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("StartTest", " " , " ");
-        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Username: ", "Daire", " ");
+      
     }
 
     void Update()
@@ -54,8 +53,20 @@ public class UIManager : MonoBehaviour
         if(Input.GetKeyDown(KeyCode.Space)){
             //Debug.Log("Spacebar pressed!");
             detectShapePanel.SetActive(!detectShapePanel.activeSelf);
-            LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Detect shape prompt: ", detectShapePanel.activeSelf.ToString(), " ");
+            LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Detect shape prompt by spacebar: ", detectShapePanel.activeSelf.ToString(), " ");
         }
+    }
+
+    public void StartTest()
+    {
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex + 1);
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Start Test", " " , " ");
+    }
+
+    public void QuitApplication()
+    {
+        Debug.Log("Quit Application");
+        Application.Quit ();
     }
 
     public void QuitButtonPressed()

@@ -34,6 +34,18 @@ public class UserSettings : MonoBehaviour
 
     }
 
+    public void StartTest()
+    {
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex + 1);
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Start Test", " " , " ");
+    }
+
+    public void QuitApplication ()
+    {
+        Debug.Log("Quit Application");
+        Application.Quit ();
+    }
+
     public void SetUserID(string ID)
     {
         userID = ID;
