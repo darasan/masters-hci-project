@@ -13,10 +13,12 @@ public class Show_Warning : MonoBehaviour
 
     void OnTriggerEnter (){
         Object.SetActive(true);
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Warning: user off track!", " ", " ");
     }
 
     void OnTriggerExit()
     {
         Object.SetActive(false);
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("User back on track", " ", " ");
     }
 }
