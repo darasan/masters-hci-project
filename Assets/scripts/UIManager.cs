@@ -84,6 +84,7 @@ public class UIManager : MonoBehaviour
     public void QuitButtonPressed()
     {
         Debug.Log("Quit");
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Quit button pressed, load main menu", " ", " ");
         SceneManager.LoadScene("MainMenu");
     }
 
