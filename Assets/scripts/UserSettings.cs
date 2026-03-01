@@ -1,11 +1,12 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class UserSettings : MonoBehaviour
 {
     public static UserSettings Instance { get; private set; }
 
     //User settings
-    public string userID = "Daire";
+    public string userID = "Default";
     public bool autoShowShapePanel = true;
     public int shapePanelSeconds = 5;
 
@@ -50,6 +51,7 @@ public class UserSettings : MonoBehaviour
     {
         userID = ID;
         Debug.Log("SetUserID: " + userID);
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Username:", userID, " ");
     }
 
     public void SetShapePanelAutoShow(bool show)
@@ -63,6 +65,7 @@ public class UserSettings : MonoBehaviour
         if(int.TryParse(seconds, out int secs)){
             shapePanelSeconds = secs; //Needed to add intermediary variable, or class instance not updated (eg when access from UI manager)
             Debug.Log("SetShapePanelSeconds: " + shapePanelSeconds);
+            LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("SetShapePanelSeconds:", shapePanelSeconds.ToString(), " ");
         }
         else{
             Debug.Log("Invalid number");

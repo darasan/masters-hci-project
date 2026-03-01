@@ -79,8 +79,11 @@ public class UIManager : MonoBehaviour
     {
         Debug.Log("Display shape panel for " + seconds + " seconds");
         detectShapePanel.SetActive(true);
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Detect shape panel active:", detectShapePanel.activeSelf.ToString(), " ");
         yield return new WaitForSeconds((float)seconds);
+
         detectShapePanel.SetActive(false);
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Detect shape panel active:", detectShapePanel.activeSelf.ToString(), " ");
     }
 
     private void signalZoneEntered()

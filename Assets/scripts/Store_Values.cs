@@ -7,17 +7,15 @@ public class Store_Values : MonoBehaviour
 {
     private float offset_z= 500.01f;
     private float offset_x= 37.1f;
-    public static List <float> positions_x= new List <float>();
-    public static List <float> positions_z= new List <float>();
-    public static List <float> real_positions= new List <float>();
-
   
     private float position_x=0f; 
     private float position_z=0f;
-    private float Real_position=0;
 
     public bool store_continues ;
     // Update is called once per frame
+
+    private string currentLane;
+    private string targetLane;
 
     void Start()
     {
@@ -32,21 +30,26 @@ public class Store_Values : MonoBehaviour
     {
         position_x = Car_Movement.position_x - offset_x;
         position_z = Car_Movement.position_z - offset_z;
-        Real_position= Spawn_Images.real_position;
+        //targetLane = Spawn_Images.real_position; real_position already captured in fixed update in SpawnImages, no need to copy here. Just write to data below
+        //Guess this is called every frame, eg at 30 fps so 30 times/second-> around 30ms. If want faster writes than this maybe update it but prob fine
 
         store_continues = Reset_Level.stop_storage;
-      //  Debug.Log("pos X: " + position_x + "pos Z: " + position_z + "real pos: " + Real_position);       
+        //Debug.Log("pos X: " + position_x + "pos Z: " + position_z + "real pos: " + Real_position);       
     }
 
     IEnumerator take_values()
     {
         while( !store_continues){
-           
-            positions_z.Add(position_z);
-            positions_x.Add(position_x);
-            real_positions.Add(Real_position);
-            yield return new WaitForSeconds(0.5f);
+            currentLane = Spawn_Images.currentLane.ToString();
+            targetLane  = ((Spawn_Images.LanePosition)Spawn_Images.real_position).ToString();
 
+            //try own logger and compare
+            //LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("pos_x", position_x.ToString() , " ");
+
+            //For mult values per timestamp like orig file, just use simple message, not AOT. Separate with semicolons by self:
+            LoggingSystem.Instance.writeMessageWithTimestampToLog("pos_x " + position_x.ToString() + "; currentLane " + currentLane + ";  targetLane " + targetLane);
+
+            yield return new WaitForSeconds(1.0f); //was 0.5, slow down for testing
         }
     }
 
