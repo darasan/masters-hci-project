@@ -11,12 +11,29 @@ public class UIManager : MonoBehaviour
 
     public Text currentLaneText;
     public Text targetLaneText;
+    public Text currentShapeText;
 
     private string currentLane;
     private string targetLane;
     private bool inCorrectLane = true;
 
     [SerializeField] private GameObject detectShapePanel;
+
+    public void SelectNextShapeInList(){
+        int numShapes = UserSettings.Instance.numShapes;
+        UserSettings.Instance.currentShape = (UserSettings.ShapeType) ((((int) UserSettings.Instance.currentShape) + 1) % numShapes);
+        currentShapeText.text =  UserSettings.Instance.currentShape.ToString();
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Current shape:",  currentShapeText.text, " ");
+        //Debug.Log("Current shape: " + UserSettings.Instance.currentShape);
+    }
+
+    public void SelectPreviousShapeInList(){
+        int numShapes = UserSettings.Instance.numShapes;
+        UserSettings.Instance.currentShape = (UserSettings.ShapeType) ((((int) UserSettings.Instance.currentShape) - 1 + numShapes) % numShapes);
+        currentShapeText.text =  UserSettings.Instance.currentShape.ToString();
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Current shape:",  currentShapeText.text, " ");
+        //Debug.Log("Current shape: " + UserSettings.Instance.currentShape);
+    }
 
 
     void Awake()
@@ -26,7 +43,7 @@ public class UIManager : MonoBehaviour
 
     void Start()
     {
-      
+        currentShapeText.text =  UserSettings.Instance.currentShape.ToString();
     }
 
     void Update()
@@ -51,22 +68,17 @@ public class UIManager : MonoBehaviour
 
         //Keyboard input
         if(Input.GetKeyDown(KeyCode.Space)){
-            //Debug.Log("Spacebar pressed!");
             detectShapePanel.SetActive(!detectShapePanel.activeSelf);
             LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Detect shape prompt by spacebar: ", detectShapePanel.activeSelf.ToString(), " ");
         }
-    }
 
-    public void StartTest()
-    {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex + 1);
-        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Start Test", " " , " ");
-    }
+        else if (Input.GetKeyDown(KeyCode.UpArrow)){
+            SelectNextShapeInList();
+        }
 
-    public void QuitApplication()
-    {
-        Debug.Log("Quit Application");
-        Application.Quit ();
+        else if (Input.GetKeyDown(KeyCode.DownArrow)){
+            SelectPreviousShapeInList();
+        }
     }
 
     public void QuitButtonPressed()
@@ -96,13 +108,11 @@ public class UIManager : MonoBehaviour
 
     void OnEnable()
     {
-        Debug.Log("OnEnable, subscribe events");
         Spawn_Images.signalZoneEnteredEvent += signalZoneEntered;
     }
 
     void OnDisable()
     {
-        Debug.Log("OnDisable, unsubscribe events");
         Spawn_Images.signalZoneEnteredEvent -= signalZoneEntered;
     }
 

@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 public class UserSettings : MonoBehaviour
 {
@@ -9,6 +8,20 @@ public class UserSettings : MonoBehaviour
     public string userID = "Default";
     public bool autoShowShapePanel = true;
     public int shapePanelSeconds = 5;
+
+    public enum ShapeType{
+      Flat = 0,
+      Square01mm,
+      Square02mm,
+      Square03mm,
+      Square04mm,
+      Square05mm,
+      Square06mm,
+      Square07mm
+   }
+
+    public ShapeType currentShape =  ShapeType.Flat;
+    public int numShapes = System.Enum.GetValues(typeof(ShapeType)).Length;
 
     private void Awake()
     {
@@ -33,18 +46,6 @@ public class UserSettings : MonoBehaviour
     void Update()
     {
 
-    }
-
-    public void StartTest()
-    {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex + 1);
-        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Start Test", " " , " ");
-    }
-
-    public void QuitApplication ()
-    {
-        Debug.Log("Quit Application");
-        Application.Quit ();
     }
 
     public void SetUserID(string ID)
