@@ -18,7 +18,7 @@ public class Reset_Level : MonoBehaviour
     {
       sceneChanging_in_between=false;
       //num_Of_Reps=Form_Menu.rep; TODO add to user settings. useless anyway? just tap button if need to repeat
-      repetition=Scene_Changing.repetition;
+     // repetition=Scene_Changing.repetition; removed
       stop_storage=false;
         
       player = GameObject.FindGameObjectWithTag("Player");

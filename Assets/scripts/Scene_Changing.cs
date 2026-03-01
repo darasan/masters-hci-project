@@ -8,6 +8,8 @@ using System;
 //using System.Diagnostics;
 
 
+/*
+
 public class Scene_Changing : MonoBehaviour
 {
     public static float repetition;
@@ -95,10 +97,10 @@ public class Scene_Changing : MonoBehaviour
                 if(previous_values==1 || (previous_values == 0 && value == -1 )){
                     print("D  ");
 
-                    /*for (int j = 0; j < curves_V2.Count; j++)
-                    {
-                        curves_V2[j] = -curves_V2[j];
-                    }*/
+                    //for (int j = 0; j < curves_V2.Count; j++)
+                    //{
+                    //    curves_V2[j] = -curves_V2[j];
+                    //}
 
 
                     for( int j = 0; (j < (nmb_lane*2)) && ((i + j) < Real_position.Count); j++ )
@@ -128,6 +130,7 @@ public class Scene_Changing : MonoBehaviour
 
         TextWriter tw= new StreamWriter(filePath, true);
         tw.WriteLine("Position X; Position Z; Signals Position");
+        UnityEngine.Debug.Log("wrote pos to log");
 
 
        for( int i = 0; i < positions_of_x.Count; i++ )
@@ -167,7 +170,7 @@ public class Scene_Changing : MonoBehaviour
     }
 }
 
-
+*/
 
 
 /*loop que estava antes
