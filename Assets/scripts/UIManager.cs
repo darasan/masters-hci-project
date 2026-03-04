@@ -23,7 +23,7 @@ public class UIManager : MonoBehaviour
         int numShapes = UserSettings.Instance.numShapes;
         UserSettings.Instance.currentShape = (UserSettings.ShapeType) ((((int) UserSettings.Instance.currentShape) + 1) % numShapes);
         currentShapeText.text =  UserSettings.Instance.currentShape.ToString();
-        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Current shape:",  currentShapeText.text, " ");
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Change current shape to: ",  currentShapeText.text, " ");
         //Debug.Log("Current shape: " + UserSettings.Instance.currentShape);
     }
 
@@ -31,7 +31,7 @@ public class UIManager : MonoBehaviour
         int numShapes = UserSettings.Instance.numShapes;
         UserSettings.Instance.currentShape = (UserSettings.ShapeType) ((((int) UserSettings.Instance.currentShape) - 1 + numShapes) % numShapes);
         currentShapeText.text =  UserSettings.Instance.currentShape.ToString();
-        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Current shape:",  currentShapeText.text, " ");
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Change current shape to: ",  currentShapeText.text, " ");
         //Debug.Log("Current shape: " + UserSettings.Instance.currentShape);
     }
 

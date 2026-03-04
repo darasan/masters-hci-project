@@ -35,8 +35,8 @@ public class Car_Movement : MonoBehaviour{
     public Text speedLabel; 
     public Text distanceLabel;
 
-    public float norm_pos_x = 0; //car pos + 500 adjusted for offset
-    public float percent_complete = 0;
+    public static float norm_pos_x = 0; //car pos + 500 adjusted for offset
+    public static float percent_complete = 0;
 
     private void Start() {
         maxVelocity = Options_Menu.Car_speed; 

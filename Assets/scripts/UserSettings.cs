@@ -6,6 +6,7 @@ public class UserSettings : MonoBehaviour
 
     //User settings
     public string userID = "Default";
+    public string userNotes = " ";
     public bool autoShowShapePanel = true;
     public int shapePanelSeconds = 5;
 
@@ -53,6 +54,11 @@ public class UserSettings : MonoBehaviour
         userID = ID;
         Debug.Log("SetUserID: " + userID);
         LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Username:", userID, " ");
+    }
+
+    public void SetUserNotes(string notes)
+    {
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("User notes:", notes, " ");
     }
 
     public void SetShapePanelAutoShow(bool show)

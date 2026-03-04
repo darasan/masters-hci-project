@@ -47,9 +47,9 @@ public class Store_Values : MonoBehaviour
             //LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("pos_x", position_x.ToString() , " ");
 
             //For mult values per timestamp like orig file, just use simple message, not AOT. Separate with semicolons by self:
-            LoggingSystem.Instance.writeMessageWithTimestampToLog("pos_x " + position_x.ToString() + "; currentLane " + currentLane + ";  targetLane " + targetLane);
+            LoggingSystem.Instance.writeMessageWithTimestampToLog("meters: " + Car_Movement.norm_pos_x + "; currentLane: " + currentLane + "; targetLane: " + targetLane + "; currentShape: " + UserSettings.Instance.currentShape.ToString());
 
-            yield return new WaitForSeconds(1.0f); //was 0.5, slow down for testing
+            yield return new WaitForSeconds(0.20f); //was 0.5, slow down for testing
         }
     }
 
