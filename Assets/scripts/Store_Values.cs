@@ -14,8 +14,8 @@ public class Store_Values : MonoBehaviour
     public bool store_continues ;
     // Update is called once per frame
 
-    private string currentLane;
-    private string targetLane;
+    private int currentLane;
+    private int targetLane;
 
     void Start()
     {
@@ -40,14 +40,14 @@ public class Store_Values : MonoBehaviour
     IEnumerator take_values()
     {
         while( !store_continues){
-            currentLane = Spawn_Images.currentLane.ToString();
-            targetLane  = ((Spawn_Images.LanePosition)Spawn_Images.real_position).ToString();
+            currentLane = (int) Spawn_Images.currentLane;
+            targetLane  = (int) Spawn_Images.real_position;
 
             //For mult values per timestamp like orig file, just use simple message, not AOT. Separate with semicolons by self:
             //LoggingSystem.Instance.writeMessageWithTimestampToLog("meters: " + Car_Movement.norm_pos_x + "; currentLane: " + currentLane + "; targetLane: " + targetLane + "; currentShape: " + UserSettings.Instance.currentShape.ToString());
 
-            //New version:
-            LoggingSystem.Instance.writeMultipleValuesWithTimestamp(Car_Movement.norm_pos_x, currentLane, targetLane);
+            //("Time", "Meters", "currentLane", "targetLane");
+            LoggingSystem.Instance.writeMultipleValuesWithTimestamp(Car_Movement.norm_pos_x, currentLane.ToString(), targetLane.ToString());
 
             yield return new WaitForSeconds(0.20f); //was 0.5, slow down for testing
         }

@@ -42,7 +42,7 @@ public class Main_Menu : MonoBehaviour
         Debug.Log("Current shape:" + UserSettings.Instance.currentShape.ToString());
 
         //Set column names for driving data
-        LoggingSystem.Instance.writeMultipleValuesWithTimestamp("Time", "Meters", "currentLane", "targetLane");
+        LoggingSystem.Instance.writeMultipleValuesWithTimestamp("Meters", "currentLane", "targetLane");
 
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex + 1);
     }
