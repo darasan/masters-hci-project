@@ -43,11 +43,11 @@ public class Store_Values : MonoBehaviour
             currentLane = Spawn_Images.currentLane.ToString();
             targetLane  = ((Spawn_Images.LanePosition)Spawn_Images.real_position).ToString();
 
-            //try own logger and compare
-            //LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("pos_x", position_x.ToString() , " ");
-
             //For mult values per timestamp like orig file, just use simple message, not AOT. Separate with semicolons by self:
-            LoggingSystem.Instance.writeMessageWithTimestampToLog("meters: " + Car_Movement.norm_pos_x + "; currentLane: " + currentLane + "; targetLane: " + targetLane + "; currentShape: " + UserSettings.Instance.currentShape.ToString());
+            //LoggingSystem.Instance.writeMessageWithTimestampToLog("meters: " + Car_Movement.norm_pos_x + "; currentLane: " + currentLane + "; targetLane: " + targetLane + "; currentShape: " + UserSettings.Instance.currentShape.ToString());
+
+            //New version:
+            LoggingSystem.Instance.writeMultipleValuesWithTimestamp(Car_Movement.norm_pos_x, currentLane, targetLane);
 
             yield return new WaitForSeconds(0.20f); //was 0.5, slow down for testing
         }

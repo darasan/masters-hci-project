@@ -40,6 +40,10 @@ public class Main_Menu : MonoBehaviour
         LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Start Test", " " , " ");
         LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Current shape:", UserSettings.Instance.currentShape.ToString(), " ");
         Debug.Log("Current shape:" + UserSettings.Instance.currentShape.ToString());
+
+        //Set column names for driving data
+        LoggingSystem.Instance.writeMultipleValuesWithTimestamp("Time", "Meters", "currentLane", "targetLane");
+
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex + 1);
     }
 
