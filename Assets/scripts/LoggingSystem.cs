@@ -85,15 +85,14 @@ public class LoggingSystem : MonoBehaviour {
 	/// <param name="message">string representing the message to be written.</param>
 	public void writeMessageToLog(string message)
 	{
-		if(this.activeLogging)
-		{
-			if(File.Exists(this.logFile))
-			{
-				TextWriter tw = new StreamWriter(this.logFile, true);
-				tw.WriteLine(message);
-				tw.Close(); 
-			}
-		}
+    	if (this.activeLogging && File.Exists(this.logFile))
+    	{
+        	using (TextWriter tw = new StreamWriter(this.logFile, true))
+        	{
+            	tw.WriteLine(message);
+        	}
+    	}
+	}
 	}
 
 	/// <summary>
