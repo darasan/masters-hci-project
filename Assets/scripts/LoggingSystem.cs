@@ -93,6 +93,16 @@ public class LoggingSystem : MonoBehaviour {
         	}
     	}
 	}
+
+	public void writeMultipleValuesWithTimestamp(params object[] values)
+	{
+    	string line = Time.realtimeSinceStartup.ToString();
+
+    	foreach (object v in values){
+        	line += "," + v.ToString();
+		}
+
+    	writeMessageToLog(line);
 	}
 
 	/// <summary>
