@@ -79,6 +79,11 @@ public class UIManager : MonoBehaviour
         else if (Input.GetKeyDown(KeyCode.DownArrow)){
             SelectPreviousShapeInList();
         }
+
+        else if (Input.GetKeyDown(KeyCode.Return)){
+            Debug.Log("Confirmed that detected shape");
+            LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Confirmed that detected shape", " ", " ");
+        }
     }
 
     public void QuitButtonPressed()
