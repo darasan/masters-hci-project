@@ -53,7 +53,8 @@ public class Signal_Position : MonoBehaviour
         vector = new Vector3 (start_position + i * dist_betwen_sig + aleatorio, 6f, 501);
         Instantiate(empty_prefab_script, vector, Z_90);
 
-        //Debug.Log("Created signal at x = " + vector.x);
+        Debug.Log("Created signal at x = " + vector.x);
+        LoggingSystem.Instance.writeMultipleValuesWithTimestamp("Created signal at x = ", vector.x);
     }
 
 
