@@ -84,6 +84,11 @@ public class UIManager : MonoBehaviour
             Debug.Log("Confirmed that detected shape");
             LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Confirmed that detected shape", " ", " ");
         }
+
+         else if (Input.GetKeyDown(KeyCode.Backspace)){
+            Debug.Log("Could not detect shape");
+            LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Could not detect shape", " ", " ");
+        }
     }
 
     public void QuitButtonPressed()
