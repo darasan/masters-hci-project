@@ -28,7 +28,7 @@ public class Reset_Level : MonoBehaviour
 
   void Update()
   {
-    if (Enterd) {//stops car (daire: if collision, set below. When collides with finish line? just to reset level and load next scene)
+    if (Enterd) {
       
       player.GetComponent<Rigidbody>().linearVelocity = Vector3.zero;
       player.GetComponent<Rigidbody>().angularVelocity = Vector3.zero;
@@ -37,8 +37,8 @@ public class Reset_Level : MonoBehaviour
         stop_storage=false;
         repetition++;
 
-        SceneManager.LoadScene("in_between");
-        
+        SceneManager.LoadScene("LaneChangeTest");
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Restarted test", " ", " "); 
       }
     }
   }
