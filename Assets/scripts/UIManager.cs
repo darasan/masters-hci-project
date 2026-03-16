@@ -69,7 +69,7 @@ public class UIManager : MonoBehaviour
         //Keyboard input
         if(Input.GetKeyDown(KeyCode.Space)){
             detectShapePanel.SetActive(!detectShapePanel.activeSelf);
-            LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Detect shape prompt by spacebar: ", detectShapePanel.activeSelf.ToString(), " ");
+            LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Detect shape prompt by spacebar: ", detectShapePanel.activeSelf.ToString(), "Current shape: " + UserSettings.Instance.currentShape.ToString());
         }
 
         else if (Input.GetKeyDown(KeyCode.UpArrow)){
@@ -82,12 +82,12 @@ public class UIManager : MonoBehaviour
 
         else if (Input.GetKeyDown(KeyCode.Return)){
             Debug.Log("Confirmed that detected shape");
-            LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Confirmed that detected shape", " ", " ");
+            LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Confirmed that detected shape: ", UserSettings.Instance.currentShape.ToString(), " ");
         }
 
          else if (Input.GetKeyDown(KeyCode.Backspace)){
             Debug.Log("Could not detect shape");
-            LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Could not detect shape", " ", " ");
+            LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Could not detect shape: ", UserSettings.Instance.currentShape.ToString(), " ");
         }
     }
 

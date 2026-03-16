@@ -7,7 +7,7 @@ public class UserSettings : MonoBehaviour
     //User settings
     public string userID = "Default";
     public string userNotes = " ";
-    public bool autoShowShapePanel = true;
+    public bool autoShowShapePanel = false;
     public int shapePanelSeconds = 5;
 
     public enum ShapeType{
@@ -41,7 +41,7 @@ public class UserSettings : MonoBehaviour
 
     void Start()
     {
-
+        autoShowShapePanel = false;
     }
 
     void Update()

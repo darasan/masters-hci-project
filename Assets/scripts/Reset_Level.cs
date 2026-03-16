@@ -47,6 +47,7 @@ public class Reset_Level : MonoBehaviour
   void OnCollisionEnter(Collision collision)
   {
     if (collision.gameObject.tag == "Player"){
+      LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Reached end of test (finish line)", " ", " ");
       sceneChanging_in_between=true;
       Enterd=true;
       stop_storage=true;
