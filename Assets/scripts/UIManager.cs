@@ -12,6 +12,7 @@ public class UIManager : MonoBehaviour
     public Text currentLaneText;
     public Text targetLaneText;
     public Text currentShapeText;
+    public Text currentReversalText;
 
     private string currentLane;
     private string targetLane;
@@ -33,6 +34,22 @@ public class UIManager : MonoBehaviour
         currentShapeText.text =  UserSettings.Instance.currentShape.ToString();
         LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Change current shape to: ",  currentShapeText.text, " ");
         //Debug.Log("Current shape: " + UserSettings.Instance.currentShape);
+    }
+
+    public void SelectNextReversal(){
+        int numReversals = UserSettings.Instance.numReversals;
+        UserSettings.Instance.currentReversal = (UserSettings.ReversalType) ((((int) UserSettings.Instance.currentReversal) + 1) % numReversals);
+        currentReversalText.text =  UserSettings.Instance.currentReversal.ToString();
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Change current reversal to: ",  currentReversalText.text, " ");
+        Debug.Log("Current reversal: " + UserSettings.Instance.currentReversal);
+    }
+
+    public void SelectPreviousReversal(){
+        int numReversals = UserSettings.Instance.numReversals;
+        UserSettings.Instance.currentReversal = (UserSettings.ReversalType) ((((int) UserSettings.Instance.currentReversal) - 1 + numReversals) % numReversals);
+        currentReversalText.text =  UserSettings.Instance.currentReversal.ToString();
+        LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Change current reversal to: ",  currentReversalText.text, " ");
+        Debug.Log("Current reversal: " + UserSettings.Instance.currentReversal);
     }
 
 
@@ -78,6 +95,14 @@ public class UIManager : MonoBehaviour
 
         else if (Input.GetKeyDown(KeyCode.DownArrow)){
             SelectPreviousShapeInList();
+        }
+
+        else if (Input.GetKeyDown(KeyCode.LeftArrow)){
+            SelectPreviousReversal();
+        }
+
+        else if (Input.GetKeyDown(KeyCode.RightArrow)){
+            SelectNextReversal();
         }
 
         else if (Input.GetKeyDown(KeyCode.Return)){

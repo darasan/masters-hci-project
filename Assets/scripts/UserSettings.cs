@@ -21,8 +21,23 @@ public class UserSettings : MonoBehaviour
       Square07mm
    }
 
+    public enum ReversalType{
+      Rev0 = 0,
+      Rev1,
+      Rev2,
+      Rev3,
+      Rev4,
+      Rev5,
+      Rev6,
+      Rev7,
+      Rev8,
+   }
+
     public ShapeType currentShape =  ShapeType.Flat;
     public int numShapes = System.Enum.GetValues(typeof(ShapeType)).Length;
+
+    public ReversalType currentReversal =  ReversalType.Rev0;
+    public int numReversals = System.Enum.GetValues(typeof(ReversalType)).Length;
 
     private void Awake()
     {
