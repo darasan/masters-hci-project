@@ -1,7 +1,6 @@
 Library/PackageCache/
 Library/
 Assets/Car_Low/
-Assets/materials/
 Assets/ADG_Textures/
 Assets/_TerrainAutoUpgrade/
 Assets/Scenes/Lane_chance_tes/
@@ -12,7 +11,6 @@ obj/
 Assets/_TerrainAutoUpgrade.meta
 Assets/ADG_Textures.meta
 Assets/Car_Low.meta
-Assets/materials.meta
 Assets/New Terrain 1.asset
 Assets/New Terrain 1.asset.meta
 Assets/New Terrain.asset
