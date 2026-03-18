@@ -43,11 +43,19 @@ public class Reset_Level : MonoBehaviour
     }
   }
 
-
   void OnCollisionEnter(Collision collision)
   {
     if (collision.gameObject.tag == "Player"){
       LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Reached end of test (finish line)", " ", " ");
+      
+      LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("Lane Changes left to do: ", " " , " ");
+      LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("right_left: ", Spawn_Images.right_left.ToString(), " ");
+      LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("right_center: ", Spawn_Images.right_center.ToString(), " ");
+      LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("left_right: ", Spawn_Images.left_right.ToString(), " ");
+      LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("left_center: ", Spawn_Images.left_center.ToString(), " ");
+      LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("center_left: ", Spawn_Images.center_left.ToString(), " ");
+      LoggingSystem.Instance.writeAOTMessageWithTimestampToLog("center_right: ", Spawn_Images.center_right.ToString(), " ");
+
       sceneChanging_in_between=true;
       Enterd=true;
       stop_storage=true;
