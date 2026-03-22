@@ -140,6 +140,8 @@ lines_1, labels_1 = ax1.get_legend_handles_labels()
 #ax1.legend(lines_1 + lines_2, labels_1 + labels_2)
 ax1.legend(lines_1, labels_1)
 
+plt.yticks([-8.2,0,8.2], ["Left","Center","Right"])
+
 plt.title(f"LCT Analysis (mdev = {mdev:.3f} m)")
 
 plt.tight_layout()
