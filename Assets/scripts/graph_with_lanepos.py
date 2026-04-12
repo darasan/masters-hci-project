@@ -61,7 +61,11 @@ input_csv = sys.argv[1]
 input_dir = os.path.dirname(os.path.abspath(input_csv))
 base_name = os.path.splitext(os.path.basename(input_csv))[0]
 figures_output_dir = os.path.normpath(os.path.join(input_dir, "..", "figures"))
+processed_output_dir = os.path.normpath(os.path.join(input_dir, "..\..", "data\processed")) #check on Mac or set dir directly
+
+#Create output directories
 os.makedirs(figures_output_dir, exist_ok=True)
+os.makedirs(processed_output_dir, exist_ok=True)
 
 # Validate input file
 if not os.path.isfile(input_csv):
@@ -105,8 +109,8 @@ df = df[df["Timestamp"] != ""]
 df["Timestamp"] = pd.to_numeric(df["Timestamp"], errors="coerce")
 df = df.dropna(subset=["Timestamp"]).sort_values("Timestamp").reset_index(drop=True)
 
-print("Loaded rows:", len(df))
-print(df.head(10).to_string())
+#print("Loaded rows:", len(df))
+#print(df.head(10).to_string())
 
 # Drop invalid rows
 #df = df.dropna(subset=[df.columns[0]]) #drop if timestamp missing
@@ -317,6 +321,10 @@ inactive = position_df[position_df["shape_active"] == 0]["deviation_m"]
 # 7. Print results
 # --------------------------------------------------
 
+#Round all numbers to 4 places
+cols_to_round = ["Timestamp", "Meters", "LateralPos", "target_pos_smooth", "deviation_m"]
+position_df[cols_to_round] = position_df[cols_to_round].round(4)
+
 print(f"Total mdev: {mdev:.4f} m")
 print(f"Missed lane changes: {missed_lane_changes}")
 print(f"Wrong-lane time: {wrong_lane_time:.3f} s")
@@ -338,7 +346,13 @@ for i, (start, end) in enumerate(shape_intervals, start=1):
 #print(position_df.iloc[10:400].to_string())
 
 #Print everything
-print(position_df.to_string())
+#print(position_df.to_string())
+
+#Dump position dataframe to CSV (cleaned data)
+output_csv_path = os.path.join(processed_output_dir, f"{base_name}_clean.csv")
+position_df.to_csv(output_csv_path, index=False)
+print(f"Wrote CSV file to: {output_csv_path}")
+
 
 # --------------------------------------------------
 # 8. Plot results
