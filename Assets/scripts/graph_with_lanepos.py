@@ -317,6 +317,17 @@ for _, row in df.iterrows():
 active = position_df[position_df["shape_active"] == 1]["deviation_m"]
 inactive = position_df[position_df["shape_active"] == 0]["deviation_m"]
 
+shape_active_df = position_df[position_df["shape_active"] == 1]
+mdev_by_shape = (
+    shape_active_df.groupby("shape_depth")
+    .apply(
+        lambda g: ((g["deviation_m"] * g["delta_x"]).sum() / g["delta_x"].sum())
+        if g["delta_x"].sum() > 0 else np.nan
+    )
+    .reset_index(name="mdev")
+)
+mdev_by_shape["mdev"] = mdev_by_shape["mdev"].round(4)
+
 # --------------------------------------------------
 # 7. Print results
 # --------------------------------------------------
@@ -325,13 +336,15 @@ inactive = position_df[position_df["shape_active"] == 0]["deviation_m"]
 cols_to_round = ["Timestamp", "Meters", "LateralPos", "target_pos_smooth", "deviation_m"]
 position_df[cols_to_round] = position_df[cols_to_round].round(4)
 
-print(f"Total mdev: {mdev:.4f} m")
+print(f"Total mdev: {mdev:} m")
 print(f"Missed lane changes: {missed_lane_changes}")
-print(f"Wrong-lane time: {wrong_lane_time:.3f} s")
-print(f"Percentage of time in wrong lane: {wrong_lane_pct:.2f}%")
-print(f"Average lane-change time: {avg_lane_change_time:.3f} s")
-print(f"Active mean: {active.mean():.3f}")
-print(f"Inactive mean: {inactive.mean():.3f}")
+print(f"Wrong-lane time: {wrong_lane_time:} s")
+print(f"Percentage of time in wrong lane: {wrong_lane_pct:}%")
+print(f"Average lane-change time: {avg_lane_change_time:} s")
+print(f"Active mean: {active.mean():}")
+print(f"Inactive mean: {inactive.mean():}")
+print("mdev by shape depth:")
+print(mdev_by_shape.to_string(index=False))
 
 #Shape detection intervals
 print(f"Shape detection intervals: ")
@@ -424,7 +437,7 @@ plt.tight_layout()
 fig.savefig(png_output_path, bbox_inches="tight", dpi=300)
 print(f"Wrote PNG file to: {png_output_path}")
 
-# Build separate PDF figure and redraw the plot there so it stays vector.
+# Build separate PDF figure and redraw the plot there so it stays vector
 text = (
     f"Total mdev: {mdev:.4f} metres\n"
     f"Missed lane changes: {missed_lane_changes}\n"
@@ -433,6 +446,7 @@ text = (
     f"Average lane-change time: {avg_lane_change_time:.3f} s\n"
     f"Active mean: {active.mean():.3f}\n"
     f"Inactive mean: {inactive.mean():.3f}\n"
+    f"mdev by shape depth: {mdev_by_shape.to_string(index=False)}\n"
 )
 
 fig_pdf, (ax_text, ax_plot) = plt.subplots(
