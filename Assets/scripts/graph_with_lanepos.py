@@ -3,6 +3,7 @@ import sys
 import csv
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 
 
@@ -59,8 +60,8 @@ def diagnose_lct_data(df):
 input_csv = sys.argv[1]
 input_dir = os.path.dirname(os.path.abspath(input_csv))
 base_name = os.path.splitext(os.path.basename(input_csv))[0]
-output_dir = os.path.normpath(os.path.join(input_dir, "..", "graphs"))
-os.makedirs(output_dir, exist_ok=True)
+figures_output_dir = os.path.normpath(os.path.join(input_dir, "..", "figures"))
+os.makedirs(figures_output_dir, exist_ok=True)
 
 # Validate input file
 if not os.path.isfile(input_csv):
@@ -277,21 +278,33 @@ value_col = df.columns[2]
 
 shape_intervals = []
 start_time = None
-
-for _, row in df.iterrows():
-    if row["Col2"] == "Detect shape prompt by spacebar:":
-        if row["Col3"] == "True":
-            start_time = row["Timestamp"]
-        elif row["Col3"] == "False" and start_time is not None:
-            shape_intervals.append((start_time, row["Timestamp"]))
-            start_time = None
+current_shape = None
 
 #Add column for shape_active
 position_df["shape_active"] = 0
 
-for start, end in shape_intervals:
-    mask = (position_df["Timestamp"] >= start) & (position_df["Timestamp"] <= end)
-    position_df.loc[mask, "shape_active"] = 1
+#Add column for shape depth
+position_df["shape_depth"] = ""
+
+for _, row in df.iterrows():
+    if row["Col2"] == "Detect shape prompt by spacebar:":
+        shape_text = row["Col4"] if pd.notna(row["Col4"]) else ""
+        #Extract current shape depth
+        prefix = "Current shape: "
+        if shape_text.startswith(prefix):
+            current_shape = shape_text[len(prefix):]
+        else:
+            current_shape = shape_text
+
+        if row["Col3"] == "True":
+            start_time = row["Timestamp"]
+        elif row["Col3"] == "False" and start_time is not None:
+            shape_intervals.append((start_time, row["Timestamp"]))
+            mask = (position_df["Timestamp"] >= start_time) & (position_df["Timestamp"] <= row["Timestamp"])
+            position_df.loc[mask, "shape_active"] = 1
+            position_df.loc[mask, "shape_depth"] = current_shape
+            start_time = None
+            current_shape = None
 
 #print(f"shape_active column: ")
 #print(position_df.iloc[100:201]["shape_active"])
@@ -309,8 +322,8 @@ print(f"Missed lane changes: {missed_lane_changes}")
 print(f"Wrong-lane time: {wrong_lane_time:.3f} s")
 print(f"Percentage of time in wrong lane: {wrong_lane_pct:.2f}%")
 print(f"Average lane-change time: {avg_lane_change_time:.3f} s")
-print("Active mean:", active.mean())
-print("Inactive mean:", inactive.mean())
+print(f"Active mean: {active.mean():.3f}")
+print(f"Inactive mean: {inactive.mean():.3f}")
 
 #Shape detection intervals
 print(f"Shape detection intervals: ")
@@ -323,88 +336,142 @@ for i, (start, end) in enumerate(shape_intervals, start=1):
 
 #Print rows in range
 #print(position_df.iloc[10:400].to_string())
-#print(position_df.to_string())
+
+#Print everything
+print(position_df.to_string())
 
 # --------------------------------------------------
 # 8. Plot results
 # --------------------------------------------------
 
-fig, ax1 = plt.subplots(figsize=(12,4))
-
-# Driver (real data)
-ax1.plot(
-    position_df["Timestamp"],
-    position_df["LateralPos"],
-    label="Driver Lateral Position (m)"
-)
-
-# Smoothed reference 
-ax1.plot(
-    position_df["Timestamp"],
-    position_df["target_pos_smooth"],
-    linestyle="--",
-    label="Ideal Position"
-)
-
-ax1.set_xlabel("Time (seconds)")
-ax1.set_ylabel("Lateral Position (m)")
-ax1.grid(True, alpha=0.3)
-
-# Deviation
-"""ax2 = ax1.twinx()
-
-ax2.plot(
-    df["Timestamp"],
-    df["deviation_m"],
-    linestyle=":",
-    label="Deviation (m)"
-)
-
-ax2.set_ylabel("Deviation (m)") """
-
-#Plot shape detection intervals
-for i, (start, end) in enumerate(shape_intervals):
-    ax1.axvspan(
-        start,
-        end,
-        alpha=0.15,
-        label="Shape prompt active" if i == 0 else None
+def draw_lct_plot(ax, label_fs=10, tick_fs=10, title_fs=12, legend_fs=10, metrics_fs=10, show_metrics=True):
+    ax.plot(
+        position_df["Timestamp"],
+        position_df["LateralPos"],
+        label="Driver Lateral Position (m)"
     )
 
-# Legend
-lines_1, labels_1 = ax1.get_legend_handles_labels()
-#lines_2, labels_2 = ax2.get_legend_handles_labels()
+    ax.plot(
+        position_df["Timestamp"],
+        position_df["target_pos_smooth"],
+        linestyle="--",
+        label="Ideal Position"
+    )
 
-#ax1.legend(lines_1 + lines_2, labels_1 + labels_2)
-ax1.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=2)
+    for i, (start, end) in enumerate(shape_intervals):
+        ax.axvspan(
+            start,
+            end,
+            alpha=0.15,
+            label="Shape prompt active" if i == 0 else None
+        )
 
-#plt.yticks([-8.4,0,8.4], ["Left","Center","Right"])
-plt.yticks([-12.6,-8.4,-4.2, 0, 4.2, 8.4, 12.6], ["Lane R (limit)", "Lane R (center)", "Lane R (limit)", "Center lane", "Lane L (limit)", "Lane L (center)", "Lane L (limit)"])
+    ax.set_xlabel("Time (seconds)", fontsize=label_fs)
+    ax.set_ylabel("Lateral Position (m)", fontsize=label_fs)
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.3), ncol=2, fontsize=legend_fs)
+    ax.set_yticks([-12.6, -8.4, -4.2, 0, 4.2, 8.4, 12.6])
+    ax.set_yticklabels([
+        "Lane R (limit)",
+        "Lane R (center)",
+        "Lane R (limit)",
+        "Center lane",
+        "Lane L (limit)",
+        "Lane L (center)",
+        "Lane L (limit)"
+    ])
+    ax.tick_params(axis="both", labelsize=tick_fs)
+    ax.set_title(f"LCT Analysis: {base_name} (mdev = {mdev:.3f} m)", fontsize=title_fs)
 
-plt.title(f"LCT Analysis: {base_name} (mdev = {mdev:.3f} m)")
+    metrics_text = (
+        f"Missed: {missed_lane_changes}\n"
+        f"Wrong lane: {wrong_lane_pct:.2f}%\n"
+        f"Avg lane change: {avg_lane_change_time:.2f} s"
+    )
 
-#Add metrics box
-metrics_text = (
-    f"Missed: {missed_lane_changes}\n"
-    f"Wrong lane: {wrong_lane_pct:.2f}%\n"
-    f"Avg lane change: {avg_lane_change_time:.2f} s"
-)
+    if show_metrics:
+        ax.text(
+            0.02, 0.95,
+            metrics_text,
+            transform=ax.transAxes,
+            fontsize=metrics_fs,
+            verticalalignment='top',
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.7)
+        )
 
-ax1.text(
-    0.02, 0.95,
-    metrics_text,
-    transform=ax1.transAxes,
-    fontsize=10,
-    verticalalignment='top',
-    bbox=dict(boxstyle="round", facecolor="white", alpha=0.7)
-)
 
-#Write to file
-output_filename = f"{base_name}_graph.png"
-output_path = os.path.join(output_dir, output_filename)
+fig, ax1 = plt.subplots(figsize=(12, 4))
+draw_lct_plot(ax1)
+
+#Store plot as PNG file
+png_output_filename = f"{base_name}_graph.png"
+png_output_path = os.path.join(figures_output_dir, png_output_filename)
 plt.tight_layout()
-plt.savefig(output_path,  bbox_inches="tight", dpi=300)
-print(f"Wrote file to: {output_path}")
+fig.savefig(png_output_path, bbox_inches="tight", dpi=300)
+print(f"Wrote PNG file to: {png_output_path}")
+
+# Build separate PDF figure and redraw the plot there so it stays vector.
+text = (
+    f"Total mdev: {mdev:.4f} metres\n"
+    f"Missed lane changes: {missed_lane_changes}\n"
+    f"Wrong-lane time: {wrong_lane_time:.3f} s\n"
+    f"Percentage of time in wrong lane: {wrong_lane_pct:.2f}%\n"
+    f"Average lane-change time: {avg_lane_change_time:.3f} s\n"
+    f"Active mean: {active.mean():.3f}\n"
+    f"Inactive mean: {inactive.mean():.3f}\n"
+)
+
+fig_pdf, (ax_text, ax_plot) = plt.subplots(
+    2,
+    1,
+    figsize=(8.27, 11.69),
+    gridspec_kw={"height_ratios": [0.8, 1.2]}
+)
+
+fig_pdf.subplots_adjust(hspace=0.45, top=0.95, bottom=0.45)
+
+ax_text.axis("off")
+ax_text.text(
+    0.0, 0.95,
+    "Summary",
+    fontsize=14,
+    fontweight="bold",
+    ha="left",
+    va="top",
+    transform=ax_text.transAxes
+)
+ax_text.text(
+    0.0, 0.82,
+    text,
+    fontsize=12,
+    ha="left",
+    va="top",
+    multialignment="left",
+    transform=ax_text.transAxes
+)
+
+draw_lct_plot(ax_plot, label_fs=8, tick_fs=7, title_fs=10, legend_fs=8, metrics_fs=8, show_metrics=False)
+
+plot_pos = ax_plot.get_position()
+ax_plot.set_position([
+    plot_pos.x0 + 0.04,
+    plot_pos.y0,
+    plot_pos.width - 0.08,
+    plot_pos.height
+])
+
+#Store to PDF
+#pdf_path = "figures/subject_01_runs.pdf"
+#print("Writing to:", output_path.resolve())
+
+pdf_output_filename = f"{base_name}_summary.pdf"
+pdf_output_path = os.path.join(figures_output_dir, pdf_output_filename)
+
+with PdfPages(pdf_output_path) as pdf:
+    pdf.savefig(fig_pdf)
+    plt.close(fig_pdf)
+    plt.close(fig)
+print(f"Wrote PDF file to: {pdf_output_path}")
 
 #Display
 #plt.show()
