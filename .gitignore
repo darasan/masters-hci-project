@@ -6,7 +6,6 @@ Assets/_TerrainAutoUpgrade/
 Assets/Scenes/Lane_chance_tes/
 Assets/TextMesh Pro/
 Temp/
-Logs/
 obj/
 Assets/_TerrainAutoUpgrade.meta
 Assets/ADG_Textures.meta
@@ -36,3 +35,4 @@ Assets/Scenes/Menu/LightingData.asset
 Assets/Scenes/Menu/LightingData.asset.meta
 Assets/Scenes/Menu/ReflectionProbe-0.exr
 Assets/Scenes/Menu/ReflectionProbe-0.exr.meta
+Builds/
