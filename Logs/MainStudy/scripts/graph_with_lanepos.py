@@ -391,16 +391,11 @@ def build_plot_figure(position_df, summary, base_name, pdf_layout=False):
     return fig
 
 
-def write_outputs(input_csv, position_df, summary, png_fig, pdf_fig, pdf_pages=None):
+def write_csv_png(input_csv, position_df, summary, png_fig, figures_output_dir, processed_output_dir):
     input_dir = os.path.dirname(os.path.abspath(input_csv))
     base_name = os.path.splitext(os.path.basename(input_csv))[0]
-    figures_output_dir = os.path.normpath(os.path.join(input_dir, "..", "figures"))
-    processed_output_dir = os.path.normpath(os.path.join(input_dir, "..", "processed"))
 
-    os.makedirs(figures_output_dir, exist_ok=True)
-    os.makedirs(processed_output_dir, exist_ok=True)
-
-    output_csv_path = os.path.join(processed_output_dir, f"{base_name}_clean.csv")
+    output_csv_path = os.path.join(processed_output_dir,"cleaned", f"{base_name}_clean.csv")
     position_df.to_csv(output_csv_path, index=False)
     print(f"Wrote CSV file to: {output_csv_path}")
 
@@ -408,22 +403,7 @@ def write_outputs(input_csv, position_df, summary, png_fig, pdf_fig, pdf_pages=N
     png_fig.savefig(png_output_path, bbox_inches="tight", dpi=300)
     print(f"Wrote PNG file to: {png_output_path}")
 
-    if pdf_pages is not None:
-        pdf_pages.savefig(pdf_fig)
-        print(f"Added PDF page for: {base_name}")
-    else:
-        pdf_output_path = os.path.join(figures_output_dir, f"{base_name}_summary.pdf")
-        with PdfPages(pdf_output_path) as pdf:
-            pdf.savefig(pdf_fig)
-        print(f"Wrote PDF file to: {pdf_output_path}")
-
-
-def process_lct_file(input_csv, pdf_pages=None, run_diagnostics=True):
-    base_name = os.path.splitext(os.path.basename(input_csv))[0]
-
-    raw_df, position_df = load_lct_data(input_csv)
-    position_df, summary = analyze_lct_data(raw_df, position_df, run_diagnostics=run_diagnostics)
-
+def print_statistics(summary):
     print(f"Total mdev: {summary['mdev']:.4f} m")
     print(f"Missed lane changes: {summary['missed_lane_changes']}")
     print(f"Wrong-lane time: {summary['wrong_lane_time']:.3f} s")
@@ -438,56 +418,52 @@ def process_lct_file(input_csv, pdf_pages=None, run_diagnostics=True):
     for i, (start, end) in enumerate(summary["shape_intervals"], start=1):
         print(f"Interval {i}: {start} -> {end}")
 
-    png_fig = build_plot_figure(position_df, summary, base_name, pdf_layout=False)
-    pdf_fig = build_plot_figure(position_df, summary, base_name, pdf_layout=True)
-
-    write_outputs(input_csv, position_df, summary, png_fig, pdf_fig, pdf_pages=pdf_pages)
-
-    plt.close(png_fig)
-    plt.close(pdf_fig)
-
-    return position_df, summary
-
+##################################################
+################### Main program #################
+##################################################
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python graph_with_lanepos.py <input_csv>")
+        print("Usage: python graph_with_lanepos.py <..\data\P_ID")
         sys.exit(1)
 
-    input_dir = Path(sys.argv[1])
-    base_name = os.path.splitext(os.path.basename(input_dir))[0]
-    print("Base name: ", base_name)
+    #Set input/output filepaths
+    input_dir = Path(os.path.normpath(os.path.join(sys.argv[1], "processed")))
+    print("input_dir: ", input_dir)
+
+    figures_output_dir = os.path.normpath(os.path.join(input_dir, "..", "figures"))
+    processed_output_dir = os.path.normpath(os.path.join(input_dir, "..", "processed"))
+    cleaned_output_dir = os.path.normpath(os.path.join(processed_output_dir, "cleaned"))
+
+    os.makedirs(figures_output_dir, exist_ok=True)
+    os.makedirs(processed_output_dir, exist_ok=True)
+    os.makedirs(cleaned_output_dir, exist_ok=True)
 
     #Get matching files
-    #input_dir = Path(os.path.dirname(os.path.abspath(input_csv)))
-    #print("Input dir: ", input_dir)
-
     pattern = "*.csv"
     input_files = sorted(input_dir.glob(pattern))
-    for input_file in input_files:
-        print("Process file: ", input_file)
+   
+    #Process all files for the participant, store summary with graphs in single PDF
+    pdf_output_path = os.path.normpath(os.path.join(sys.argv[1], "Summary.pdf"))
+    
+    with PdfPages(pdf_output_path) as pdf:
+        for input_file in input_files:
+            print("Process file: ", input_file)
+            base_name = os.path.splitext(os.path.basename(input_file))[0]
+            #print("Base name: ", base_name)
+            
+            raw_df, position_df = load_lct_data(input_file)
+            position_df, summary = analyze_lct_data(raw_df, position_df, run_diagnostics=True)
+            #print_statistics(summary)
 
-        raw_df, position_df = load_lct_data(input_file)
-        position_df, summary = analyze_lct_data(raw_df, position_df, run_diagnostics=True)
+            png_fig = build_plot_figure(position_df, summary, base_name, pdf_layout=False)
+            pdf_fig = build_plot_figure(position_df, summary, base_name, pdf_layout=True)
+            write_csv_png(input_file, position_df, summary, png_fig, figures_output_dir, processed_output_dir)
 
-        print(f"Total mdev: {summary['mdev']:.4f} m")
-        print(f"Missed lane changes: {summary['missed_lane_changes']}")
-        print(f"Wrong-lane time: {summary['wrong_lane_time']:.3f} s")
-        print(f"Percentage of time in wrong lane: {summary['wrong_lane_pct']:.2f}%")
-        print(f"Average lane-change time: {summary['avg_lane_change_time']:.3f} s")
-        print(f"Active mean: {summary['active_mean']:.3f}")
-        print(f"Inactive mean: {summary['inactive_mean']:.3f}")
-        print("mdev by shape depth:")
-        print(summary["mdev_by_shape"].to_string(index=False))
+            print(f"Added PDF page for: {base_name}")
+            pdf.savefig(pdf_fig)
+            plt.close(png_fig)
+            plt.close(pdf_fig)
 
-        print("Shape detection intervals:")
-        for i, (start, end) in enumerate(summary["shape_intervals"], start=1):
-            print(f"Interval {i}: {start} -> {end}")
-
-        png_fig = build_plot_figure(position_df, summary, base_name, pdf_layout=False)
-        pdf_fig = build_plot_figure(position_df, summary, base_name, pdf_layout=True)
-        write_outputs(input_file, position_df, summary, png_fig, pdf_fig)
-
-        plt.close(png_fig)
-        plt.close(pdf_fig)
+    print(f"Wrote combined PDF file to: {pdf_output_path}")
 
