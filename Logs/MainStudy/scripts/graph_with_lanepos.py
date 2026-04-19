@@ -5,6 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
+import statistics
 from pathlib import Path
 
 
@@ -115,7 +116,7 @@ def load_lct_data(input_csv):
     return raw_df, position_df
 
 
-def analyze_lct_data(raw_df, position_df, run_diagnostics=True):
+def analyze_lct_data(raw_df, position_df,shape_detection, run_diagnostics=True):
     position_df = position_df.copy()
 
     if run_diagnostics:
@@ -231,10 +232,11 @@ def analyze_lct_data(raw_df, position_df, run_diagnostics=True):
                 start_time = None
                 current_shape = None
 
-    # Summarize deviation overall during active/inactive periods and by active shape depth.
+    #Extract mdev during active/inactive periods for comparison
     active = position_df[position_df["shape_active"] == 1]["deviation_m"]
     inactive = position_df[position_df["shape_active"] == 0]["deviation_m"]
 
+    #Compute mdev for each shape depth for comparison
     shape_active_df = position_df[position_df["shape_active"] == 1]
     mdev_by_shape = (
         shape_active_df.groupby("shape_depth")
@@ -244,8 +246,20 @@ def analyze_lct_data(raw_df, position_df, run_diagnostics=True):
         )
         .reset_index(name="mdev")
     )
+    #Round to 4 places
     mdev_by_shape["mdev"] = mdev_by_shape["mdev"].round(4)
 
+    #Extract shape detection thresholds for the run
+    for _, row in raw_df.iterrows():
+        if row["Col2"] == "Confirmed that detected shape:":
+           #Add to list of detected/undetected shapes
+           shape_detection.append(("Detected",row["Col3"]))
+        elif row["Col2"] == "Could not detect shape:":
+           shape_detection.append(("Not detected",row["Col3"]))
+            
+    print("Detected shapes: ",shape_detection)
+
+    #Round all numeric data
     cols_to_round = ["Timestamp", "Meters", "LateralPos", "target_pos_smooth", "deviation_m"]
     position_df[cols_to_round] = position_df[cols_to_round].round(4)
 
@@ -337,6 +351,7 @@ def build_plot_figure(position_df, summary, base_name, pdf_layout=False):
     fig.subplots_adjust(hspace=0.45, top=0.95, bottom=0.45)
 
     summary_text = (
+        f"\n\n"
         f"Total mdev: {summary['mdev']:.4f} metres\n"
         f"Missed lane changes: {summary['missed_lane_changes']}\n"
         f"Wrong-lane time: {summary['wrong_lane_time']:.3f} s\n"
@@ -344,19 +359,20 @@ def build_plot_figure(position_df, summary, base_name, pdf_layout=False):
         f"Average lane-change time: {summary['avg_lane_change_time']:.3f} s\n"
         f"Active mean: {summary['active_mean']:.3f}\n"
         f"Inactive mean: {summary['inactive_mean']:.3f}\n"
-        f"mdev by shape depth:\n{summary['mdev_by_shape'].to_string(index=False)}"
+        f"\nmdev by shape depth:\n\n{summary['mdev_by_shape'].to_string(index=False)}\n\n"
     )
 
     ax_text.axis("off")
     ax_text.text(
         0.0, 0.95,
-        "Summary",
+        f"Summary:    {base_name}\n",
         fontsize=14,
         fontweight="bold",
         ha="left",
         va="top",
         transform=ax_text.transAxes
     )
+
     ax_text.text(
         0.0, 0.82,
         summary_text,
@@ -383,13 +399,37 @@ def build_plot_figure(position_df, summary, base_name, pdf_layout=False):
     plot_pos = ax_plot.get_position()
     ax_plot.set_position([
         plot_pos.x0 + 0.04,
-        plot_pos.y0,
+        plot_pos.y0 - 0.08,
         plot_pos.width - 0.08,
         plot_pos.height
     ])
 
     return fig
 
+def build_pdf_summary_page(shape_detection):
+     
+    fig = plt.figure(figsize=(8.27, 11.69))
+    summary_text = "\n".join(f"{detected}: {depth}" for detected, depth in shape_detection)
+
+    #List of depths detected during the run. TODO move to other analysis? 
+    detected_depths = []
+    prefix = "Square"
+    for detected, depth in shape_detection:
+        if detected == "Detected" and depth.startswith(prefix):
+            #Extract the depth value from the string in the log
+            detected_depths.append(int(depth[len(prefix):len(prefix)+2]))
+    
+    avg_detected_depth =  round(statistics.mean(detected_depths), 4)
+    #TODO not really true though? Should be based on reversals otherwise skewed with first detections from 7 - 5. Threshold is the one above the reversal (if cant detect 2 then its 3 etc). Do later
+    
+    print("detected_depths: ", detected_depths)
+    print("Mean detected depth: ", avg_detected_depth)
+
+    fig.text(0.05, 0.95, "Staircase Method Summary", fontsize=14, fontweight="bold", ha="left", va="top")
+    fig.text(0.05, 0.85,  summary_text, ha="left", va="top")
+    fig.text(0.05, 0.1, f"Average detected depth: {avg_detected_depth} mm", fontweight="bold", ha="left", va="bottom")
+
+    return fig
 
 def write_csv_png(input_csv, position_df, summary, png_fig, figures_output_dir, processed_output_dir):
     input_dir = os.path.dirname(os.path.abspath(input_csv))
@@ -418,13 +458,19 @@ def print_statistics(summary):
     for i, (start, end) in enumerate(summary["shape_intervals"], start=1):
         print(f"Interval {i}: {start} -> {end}")
 
+def write_summary_to_csv(all_summaries, summary_csv_output_path):
+    #Create pandas dataframe from summary, keep specified columns only
+    all_summaries_df = pd.DataFrame(all_summaries)[["missed_lane_changes", "wrong_lane_time", "wrong_lane_pct", "mdev", "active_mean", "inactive_mean"]].round(4)
+    all_summaries_df.to_csv(summary_csv_output_path, index=False)
+    print("Wrote summary to CSV: ", summary_csv_output_path)
+
 ##################################################
 ################### Main program #################
 ##################################################
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python graph_with_lanepos.py <..\data\P_ID")
+        print("Usage: python graph_with_lanepos.py < ..\data\P_ID >")
         sys.exit(1)
 
     #Set input/output filepaths
@@ -439,21 +485,29 @@ if __name__ == "__main__":
     os.makedirs(processed_output_dir, exist_ok=True)
     os.makedirs(cleaned_output_dir, exist_ok=True)
 
+    #Store list of detected and undetected shapes for each run, to write to summary file
+    shape_detection = []
+
     #Get matching files
     pattern = "*.csv"
     input_files = sorted(input_dir.glob(pattern))
    
-    #Process all files for the participant, store summary with graphs in single PDF
-    pdf_output_path = os.path.normpath(os.path.join(sys.argv[1], "Summary.pdf"))
+    #Process all files for the participant, store summary with graphs in single PDF, CSV for statistics
+    summary_pdf_output_path = os.path.normpath(os.path.join(sys.argv[1], "Summary_graphs.pdf"))
+    summary_csv_output_path = os.path.normpath(os.path.join(sys.argv[1], "Summary_stats.csv"))
+
+    #Store all statistics for each run to CSV. To compare for full participant group later
+    summary_all_runs = []
     
-    with PdfPages(pdf_output_path) as pdf:
+    with PdfPages(summary_pdf_output_path) as pdf:
         for input_file in input_files:
             print("Process file: ", input_file)
             base_name = os.path.splitext(os.path.basename(input_file))[0]
             #print("Base name: ", base_name)
             
             raw_df, position_df = load_lct_data(input_file)
-            position_df, summary = analyze_lct_data(raw_df, position_df, run_diagnostics=True)
+            position_df, summary = analyze_lct_data(raw_df, position_df,shape_detection, run_diagnostics=True)
+            summary_all_runs.append(summary)
             #print_statistics(summary)
 
             png_fig = build_plot_figure(position_df, summary, base_name, pdf_layout=False)
@@ -463,7 +517,21 @@ if __name__ == "__main__":
             print(f"Added PDF page for: {base_name}")
             pdf.savefig(pdf_fig)
             plt.close(png_fig)
-            plt.close(pdf_fig)
+        
+        #Write staircase summary page
+        sum_page = build_pdf_summary_page(shape_detection)
+        pdf.savefig(sum_page)
 
-    print(f"Wrote combined PDF file to: {pdf_output_path}")
+        #Write summary of all runs to CSV
+        write_summary_to_csv(summary_all_runs, summary_csv_output_path)
+
+        #TODO write overall summary page (total mdev avg for active/inactive, detection thresh)
+        plt.close(pdf_fig)
+            
+    #print("Detected shapes total: ")
+    #for shape in shape_detection:
+    #    print(str(shape))
+
+    print(f"Wrote combined PDF file to: {summary_pdf_output_path}")
+
 
