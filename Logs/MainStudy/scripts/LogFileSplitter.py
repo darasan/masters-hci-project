@@ -5,7 +5,7 @@ import pandas as pd
 
 # Check for input argument
 if len(sys.argv) < 2:
-    print("Usage: LogFileSplitter.py <input_csv>")
+    print("Usage: LogFileSplitter.py ..\data\P_ID\raw\P_ID_StaircasePartX.csv")
     sys.exit(1)
 
 input_csv = sys.argv[1]
