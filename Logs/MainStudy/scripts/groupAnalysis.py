@@ -12,8 +12,10 @@ os.makedirs(summary_output_dir, exist_ok=True)
 
 #Match on this filename for each participant
 summary_pattern = "Summary_stats.csv"
+shape_detection_times_pattern = "Shape_detection_times.csv"
 
 summary_files = []
+shape_detection_times_files = []
 
 for participant_dir in root_dir.iterdir():
     if not participant_dir.is_dir():
@@ -21,6 +23,9 @@ for participant_dir in root_dir.iterdir():
 
     matches = list(participant_dir.glob(summary_pattern))
     summary_files.extend(matches)
+
+    shape_detection_times_matches = list(participant_dir.glob(shape_detection_times_pattern))
+    shape_detection_times_files.extend(shape_detection_times_matches)
 
 if not summary_files:
     raise FileNotFoundError("No participant summary CSV files found.")
@@ -49,3 +54,48 @@ group_means_df.columns = ["metric", "mean"]
 group_means_csv_path = summary_output_dir / "group_summary_means.csv"
 group_means_df.to_csv(group_means_csv_path, index=False)
 print(f"Wrote group means to: {group_means_csv_path}")
+
+if not shape_detection_times_files:
+    print("\nNo participant shape detection time CSV files found.")
+else:
+    shape_detection_times_files = sorted(shape_detection_times_files)
+    print("\nFound shape detection time files:")
+    print("\n".join(str(path) for path in shape_detection_times_files))
+
+    shape_detection_times_dfs = [pd.read_csv(file) for file in shape_detection_times_files]
+    group_shape_detection_times_df = pd.concat(shape_detection_times_dfs, ignore_index=True)
+
+    combined_shape_detection_times_csv_path = summary_output_dir / "group_shape_detection_times_combined.csv"
+    group_shape_detection_times_df.to_csv(combined_shape_detection_times_csv_path, index=False)
+    print(f"Wrote combined shape detection times to: {combined_shape_detection_times_csv_path}")
+
+    group_shape_detection_times_df["weighted_detection_time"] = (
+        group_shape_detection_times_df["avg_detection_time"]
+        * group_shape_detection_times_df["num_detections"]
+    )
+
+    group_shape_detection_times = (
+        group_shape_detection_times_df
+        .groupby("shape_type", as_index=False)
+        .agg(
+            total_detection_time=("weighted_detection_time", "sum"),
+            total_detections=("num_detections", "sum"),
+            num_participants=("participant_id", "nunique"),
+        )
+    )
+
+    group_shape_detection_times["group_avg_detection_time"] = (
+        group_shape_detection_times["total_detection_time"]
+        / group_shape_detection_times["total_detections"]
+    )
+
+    group_shape_detection_times = group_shape_detection_times[
+        ["shape_type", "group_avg_detection_time", "total_detections", "num_participants"]
+    ].round(4)
+
+    print("\nGroup average detection time by shape type:")
+    print(group_shape_detection_times.to_string(index=False))
+
+    group_shape_detection_times_csv_path = summary_output_dir / "group_shape_detection_times_means.csv"
+    group_shape_detection_times.to_csv(group_shape_detection_times_csv_path, index=False)
+    print(f"Wrote group shape detection times to: {group_shape_detection_times_csv_path}")
