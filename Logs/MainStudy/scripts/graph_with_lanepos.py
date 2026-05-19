@@ -232,22 +232,31 @@ def analyze_lct_data(raw_df, position_df,shape_detection, run_diagnostics=True):
                 start_time = None
                 current_shape = None
 
-    #Extract mdev during active/inactive periods for comparison
+    #Extract mdev during active/inactive periods for comparison. TODO rename mdev_active, more clear
     active = position_df[position_df["shape_active"] == 1]["deviation_m"]
     inactive = position_df[position_df["shape_active"] == 0]["deviation_m"]
 
     #Compute mdev for each shape depth for comparison
     shape_active_df = position_df[position_df["shape_active"] == 1]
-    mdev_by_shape = (
-        shape_active_df.groupby("shape_depth")
-        .apply(
-            lambda g: ((g["deviation_m"] * g["delta_x"]).sum() / g["delta_x"].sum())
-            if g["delta_x"].sum() > 0 else np.nan
+
+    mdev_rows = []
+
+    for shape_depth, group in shape_active_df.groupby("shape_depth"):
+        total_dx = group["delta_x"].sum()
+        mdev_value = (
+            (group["deviation_m"] * group["delta_x"]).sum() / total_dx
+            if total_dx > 0 else np.nan
         )
-        .reset_index(name="mdev")
-    )
-    #Round to 4 places
-    mdev_by_shape["mdev"] = mdev_by_shape["mdev"].round(4)
+
+        mdev_rows.append({
+            "shape_depth": shape_depth,
+            "mdev": mdev_value
+        })
+
+    mdev_by_shape = pd.DataFrame(mdev_rows, columns=["shape_depth", "mdev"])
+
+    if not mdev_by_shape.empty:
+        mdev_by_shape["mdev"] = mdev_by_shape["mdev"].round(4)
 
     #Extract shape detection thresholds for the run
     for _, row in raw_df.iterrows():
@@ -461,6 +470,11 @@ def print_statistics(summary):
 def write_summary_to_csv(all_summaries, summary_csv_output_path):
     #Create pandas dataframe from summary, keep specified columns only
     all_summaries_df = pd.DataFrame(all_summaries)[["missed_lane_changes", "wrong_lane_time", "wrong_lane_pct", "mdev", "active_mean", "inactive_mean"]].round(4)
+
+    #Insert participant ID as first column
+    all_summaries_df.insert(0, "participant_id", participant_id)
+
+    #Write file
     all_summaries_df.to_csv(summary_csv_output_path, index=False)
     print("Wrote summary to CSV: ", summary_csv_output_path)
 
@@ -475,11 +489,18 @@ if __name__ == "__main__":
 
     #Set input/output filepaths
     input_dir = Path(os.path.normpath(os.path.join(sys.argv[1], "processed")))
+
+    if not  Path(os.path.normpath(sys.argv[1])).is_dir():
+        raise FileNotFoundError(f"Directory not found: {sys.argv[1]}")
+    
     print("input_dir: ", input_dir)
 
     figures_output_dir = os.path.normpath(os.path.join(input_dir, "..", "figures"))
     processed_output_dir = os.path.normpath(os.path.join(input_dir, "..", "processed"))
     cleaned_output_dir = os.path.normpath(os.path.join(processed_output_dir, "cleaned"))
+
+    participant_id = os.path.splitext(os.path.basename(sys.argv[1]))[0]
+    print("participant_id: ", participant_id)
 
     os.makedirs(figures_output_dir, exist_ok=True)
     os.makedirs(processed_output_dir, exist_ok=True)
