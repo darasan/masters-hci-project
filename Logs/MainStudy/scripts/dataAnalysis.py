@@ -1,6 +1,8 @@
 import os
 import sys
 import csv
+import re
+import textwrap
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -170,6 +172,112 @@ def calculate_mdev(df):
         return float("nan")
 
     return (df["deviation_m"] * df["delta_x"]).sum() / total_distance
+
+#Keep only the final reversal value used when a shape is detected, to avoid intermediary values polluting the data
+def filter_reversal_events(shape_events):
+    outcome_events = {"Detected", "Not detected"}
+    filtered_events = []
+
+    for i, event in enumerate(shape_events):
+        status, _, _ = event
+        if status != "Change current reversal to":
+            filtered_events.append(event)
+            continue
+
+        following_events = shape_events[i + 1:]
+        next_outcome_idx = next(
+            (
+                j
+                for j, following_event in enumerate(following_events)
+                if following_event[0] in outcome_events
+            ),
+            None
+        )
+
+        if next_outcome_idx is None:
+            continue
+
+        events_before_outcome = following_events[:next_outcome_idx]
+        has_later_reversal = any(
+            following_event[0] == "Change current reversal to"
+            for following_event in events_before_outcome
+        )
+
+        if not has_later_reversal:
+            filtered_events.append(event)
+
+    return filtered_events
+
+
+def get_shape_detection_duration(timestamp, shape_intervals):
+    for start, end in shape_intervals:
+        if start <= timestamp <= end:
+            return round((timestamp - start), 4)
+    return None
+
+
+def extract_shape_detection_events(raw_df, shape_intervals):
+    shape_events = []
+
+    for _, row in raw_df.iterrows():
+        if row["Col2"] == "Confirmed that detected shape:":
+            detection_duration = get_shape_detection_duration(row["Timestamp"], shape_intervals)
+            shape_events.append(("Detected", row["Col3"], detection_duration))
+        elif row["Col2"] == "Could not detect shape:":
+            shape_events.append(("Not detected", row["Col3"], None))
+        elif row["Col2"] == "Change current shape to:":
+            shape_events.append(("Change current shape to", row["Col3"], None))
+        elif row["Col2"] == "Change current reversal to:":
+            shape_events.append(("Change current reversal to", row["Col3"], None))
+
+    return filter_reversal_events(shape_events)
+
+
+def extract_shape_depth_mm(shape_value):
+    match = re.search(r"(\d+(?:\.\d+)?)\s*mm", str(shape_value))
+    if not match:
+        return None
+
+    depth_text = match.group(1)
+    depth_value = float(depth_text)
+    return depth_value if "." in depth_text else depth_value / 100
+
+
+def build_reversal_threshold_lines(shape_detection):
+    threshold_lines = []
+    seen_threshold_lines = set()
+    threshold_values = []
+    last_detected_shape = None
+    current_reversal = None
+
+    for status, shape_value, _ in shape_detection:
+        if status == "Change current reversal to":
+            current_reversal = shape_value
+        elif status == "Detected":
+            last_detected_shape = shape_value
+        elif status == "Not detected" and current_reversal is not None and last_detected_shape is not None:
+            reversal_value = current_reversal
+            if reversal_value.startswith("Rev"):
+                reversal_value = reversal_value[len("Rev"):]
+            threshold_line = f"Reversal {reversal_value} threshold: {last_detected_shape}"
+            if threshold_line not in seen_threshold_lines:
+                threshold_lines.append(threshold_line)
+                seen_threshold_lines.add(threshold_line)
+                threshold_value = extract_shape_depth_mm(last_detected_shape)
+                if threshold_value is not None:
+                    threshold_values.append(threshold_value)
+
+    if threshold_values:
+        mean_threshold = statistics.mean(threshold_values)
+        threshold_lines.append(
+            (
+                f"Mean detection threshold across {len(threshold_values)}/8 reversals: "
+                f"{mean_threshold:.4f} mm",
+                True,
+            )
+        )
+
+    return threshold_lines
 
 
 def add_reference_trajectory(position_df):
@@ -362,20 +470,7 @@ def analyze_lct_data(raw_df, position_df,shape_detection, run_diagnostics=True):
     if not mdev_by_shape.empty:
         mdev_by_shape["mdev"] = mdev_by_shape["mdev"].round(4)
 
-    def get_detection_duration(timestamp, intervals):
-        for start, end in intervals:
-            if start <= timestamp <= end:
-                return round((timestamp - start), 4)
-        return None
-
-    #Extract shape detection thresholds for the run
-    for _, row in raw_df.iterrows():
-        if row["Col2"] == "Confirmed that detected shape:":
-           #Add to list of detected/undetected shapes
-           detection_duration = get_detection_duration(row["Timestamp"], shape_intervals)
-           shape_detection.append(("Detected",row["Col3"], detection_duration))
-        elif row["Col2"] == "Could not detect shape:":
-           shape_detection.append(("Not detected",row["Col3"], None))
+    shape_detection.extend(extract_shape_detection_events(raw_df, shape_intervals))
             
     print("Detected shapes: ",shape_detection)
 
@@ -526,13 +621,71 @@ def build_plot_figure(position_df, summary, base_name, pdf_layout=False):
 
     return fig
 
-def build_pdf_summary_pages(shape_detection):
-     
-    summary_fig = plt.figure(figsize=(8.27, 11.69))
-    summary_text = "\n".join(
-        f"{detected}: {depth}" if duration is None else f"{detected}: {depth} ({duration:.2f}s)"
-        for detected, depth, duration in shape_detection
-    )
+def build_pdf_summary_pages(shape_detection, include_reversal_thresholds=True):
+    summary_lines = []
+
+    def add_summary_line(line_text, bold=False):
+        wrapped_lines = textwrap.wrap(
+            line_text,
+            width=100,
+            subsequent_indent="    ",
+            break_long_words=True,
+            break_on_hyphens=False,
+        )
+        for wrapped_line in wrapped_lines or [line_text]:
+            summary_lines.append((wrapped_line, bold))
+
+    for detected, depth, duration in shape_detection:
+        if duration is None:
+            event_text = f"{detected}: {depth}"
+        else:
+            event_text = f"{detected}: {depth} ({duration:.2f}s)"
+
+        add_summary_line(event_text)
+
+    if include_reversal_thresholds:
+        reversal_threshold_lines = build_reversal_threshold_lines(shape_detection)
+        if reversal_threshold_lines:
+            add_summary_line("")
+            add_summary_line("Reversal Thresholds:")
+            for threshold_line in reversal_threshold_lines:
+                if isinstance(threshold_line, tuple):
+                    line_text, bold = threshold_line
+                    add_summary_line(line_text, bold=bold)
+                else:
+                    add_summary_line(threshold_line)
+
+    if not summary_lines:
+        summary_lines = [("No shape detection events.", False)]
+
+    lines_per_page = 58
+    summary_chunks = [
+        summary_lines[i:i + lines_per_page]
+        for i in range(0, len(summary_lines), lines_per_page)
+    ]
+    summary_pages = []
+    total_summary_pages = len(summary_chunks)
+
+    for page_num, summary_chunk in enumerate(summary_chunks, start=1):
+        summary_fig = plt.figure(figsize=(8.27, 11.69))
+        page_title = "Staircase Method Summary"
+        if total_summary_pages > 1:
+            page_title = f"{page_title} ({page_num}/{total_summary_pages})"
+
+        summary_fig.text(0.05, 0.95, page_title, fontsize=14, fontweight="bold", ha="left", va="top")
+        line_height = 0.014
+        for line_idx, (line_text, bold) in enumerate(summary_chunk):
+            summary_fig.text(
+                0.05,
+                0.90 - (line_idx * line_height),
+                line_text,
+                ha="left",
+                va="top",
+                fontsize=8.5,
+                family="monospace",
+                fontweight="bold" if bold else "normal",
+            )
+        summary_pages.append(summary_fig)
 
     detected_time_rows = [
         {
@@ -565,22 +718,24 @@ def build_pdf_summary_pages(shape_detection):
             #Extract the depth value from the string in the log
             detected_depths.append(int(depth[len(prefix):len(prefix)+2]))
     
-    avg_detected_depth =  round(statistics.mean(detected_depths), 4)
+    avg_detected_depth = round(statistics.mean(detected_depths), 4) if detected_depths else None
     #TODO not really true though? Should be based on reversals otherwise skewed with first detections from 7 - 5. Threshold is the one above the reversal (if cant detect 2 then its 3 etc). Do later
     
     print("detected_depths: ", detected_depths)
     print("Mean detected depth: ", avg_detected_depth)
 
-    summary_fig.text(0.05, 0.95, "Staircase Method Summary", fontsize=14, fontweight="bold", ha="left", va="top")
-    summary_fig.text(0.05, 0.85,  summary_text, ha="left", va="top")
-
     detection_times_fig = plt.figure(figsize=(8.27, 11.69))
     detection_times_fig.text(0.05, 0.95, "Detection Time Summary", fontsize=14, fontweight="bold", ha="left", va="top")
     detection_times_fig.text(0.05, 0.85, "Average detection time by shape type:", fontweight="bold", ha="left", va="top")
     detection_times_fig.text(0.05, 0.82, avg_detection_times_text, ha="left", va="top", fontsize=9, family="monospace")
-    detection_times_fig.text(0.05, 0.68, f"Average detected depth: {avg_detected_depth} mm", fontweight="bold", ha="left", va="top")
+    avg_detected_depth_text = (
+        f"Average detected depth: {avg_detected_depth} mm"
+        if avg_detected_depth is not None
+        else "Average detected depth: N/A"
+    )
+    detection_times_fig.text(0.05, 0.68, avg_detected_depth_text, fontweight="bold", ha="left", va="top")
 
-    return summary_fig, detection_times_fig
+    return *summary_pages, detection_times_fig
 
 def write_csv_png(input_csv, position_df, summary, png_fig, figures_output_dir, processed_output_dir):
     input_dir = os.path.dirname(os.path.abspath(input_csv))
@@ -593,9 +748,9 @@ def write_csv_png(input_csv, position_df, summary, png_fig, figures_output_dir, 
     png_output_path = os.path.join(figures_output_dir, f"{base_name}_graph.png")
 
     #Debug to zoom in graphs
-    png_fig.show()
-    plt.pause(0.1)
-    input("Inspect the plot, then press Enter to save the PNG...")
+    #png_fig.show()
+    #plt.pause(0.1)
+    #input("Inspect the plot, then press Enter to save the PNG...")
 
     png_fig.savefig(png_output_path, bbox_inches="tight", dpi=300)
     print(f"Wrote PNG file to: {png_output_path}")
