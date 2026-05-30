@@ -2,6 +2,44 @@ from pathlib import Path
 import pandas as pd
 import os
 import sys
+import matplotlib.pyplot as plt
+
+
+def write_participant_active_inactive_plot(group_df, output_dir):
+    participant_means = (
+        group_df
+        .groupby("participant_id", as_index=False)[["active_mean", "inactive_mean"]]
+        .mean()
+        .round(4)
+    )
+
+    print("\nParticipant active/inactive mdev means:")
+    print(participant_means.to_string(index=False))
+
+    participant_means_csv_path = output_dir / "participant_active_inactive_means.csv"
+    participant_means.to_csv(participant_means_csv_path, index=False)
+    print(f"Wrote participant active/inactive means to: {participant_means_csv_path}")
+
+    ax = participant_means.plot(
+        x="participant_id",
+        y=["inactive_mean", "active_mean"],
+        kind="bar",
+        figsize=(10, 6),
+        width=0.8,
+        color=["#5ea0ca", "#fea858"],
+    )
+
+    ax.set_xlabel("Participant ID")
+    ax.set_ylabel("mdev")
+    #ax.set_title("Active vs inactive mdev by participant")
+    ax.legend(["Shape inactive mdev", "Shape active mdev"])
+    plt.xticks(rotation=0)
+    plt.tight_layout()
+
+    plot_output_path = output_dir / "participant_active_inactive_mdev.png"
+    plt.savefig(plot_output_path, dpi=300)
+    plt.close()
+    print(f"Wrote participant active/inactive mdev plot to: {plot_output_path}")
 
 #Root dir is "data" with all participants directories inside. Iterate over these to build summary
 root_dir = Path(os.path.normpath(os.path.join(os.getcwd(), "..", "data")))
@@ -36,12 +74,16 @@ print("\n".join(str(path) for path in summary_files))
 
 all_dfs = [pd.read_csv(file) for file in summary_files]
 group_df = pd.concat(all_dfs, ignore_index=True)
+group_df["active_mean"] = pd.to_numeric(group_df["active_mean"], errors="coerce")
+group_df["inactive_mean"] = pd.to_numeric(group_df["inactive_mean"], errors="coerce")
 
 
 # Write combined table with all data
 combined_csv_path = summary_output_dir / "group_summary_combined.csv"
 group_df.to_csv(combined_csv_path, index=False)
 print(f"Wrote combined summary to: {combined_csv_path}")
+
+write_participant_active_inactive_plot(group_df, summary_output_dir)
 
 # Compute means of numeric columns
 group_means = group_df.mean(numeric_only=True).round(4)

@@ -12,7 +12,11 @@ from pathlib import Path
 LANE_CHANGE_DURATION = 4.0
 SIGMOID_STEEPNESS = 8
 LANE_HALF_WIDTH = 4.2
+ISO_SYMBOL_APPEARS_BEFORE_SIGN_M = 40.0
+ISO_REFERENCE_START_BEFORE_SIGN_M = 30.0
+ISO_REFERENCE_END_BEFORE_SIGN_M = 20.0
 POSITION_COLUMNS = ["Timestamp", "Meters", "LateralPos", "currentLane", "targetLane"]
+SIGN_POSITION_LOG_LABEL = "Created signal at x ="
 
 
 def diagnose_lct_data(df):
@@ -116,6 +120,133 @@ def load_lct_data(input_csv):
     return raw_df, position_df
 
 
+def extract_sign_positions(raw_df, debug=True):
+    sign_rows = raw_df[raw_df["Col2"] == SIGN_POSITION_LOG_LABEL].copy()
+    sign_rows["raw_sign_position_m"] = pd.to_numeric(sign_rows["Col3"], errors="coerce")
+
+    invalid_rows = sign_rows[sign_rows["raw_sign_position_m"].isna()]
+    sign_positions = (
+        sign_rows
+        .dropna(subset=["raw_sign_position_m"])
+        [["Timestamp", "raw_sign_position_m"]]
+        .reset_index(drop=True)
+    )
+
+    #Apply offset for negative starting values
+    sign_offset_m = (
+        sign_positions["raw_sign_position_m"].iloc[0]
+        if not sign_positions.empty else 0.0
+    )
+    sign_positions["sign_position_m"] = sign_positions["raw_sign_position_m"] - sign_offset_m
+
+    if debug:
+        raw_positions = sign_positions["raw_sign_position_m"].round(4).tolist()
+        positions = sign_positions["sign_position_m"].round(4).tolist()
+        print("\n--- Sign position parsing ---")
+        print(f"Rows matching '{SIGN_POSITION_LOG_LABEL}': {len(sign_rows)}")
+        print(f"Parsed sign positions: {len(sign_positions)}")
+        print(f"Sign position offset applied (m): {sign_offset_m:.4f}")
+        print(f"Raw sign positions (m): {raw_positions}")
+        print(f"Normalized sign positions (m): {positions}")
+
+        if not invalid_rows.empty:
+            print("Warning: Some sign position rows could not be parsed:")
+            print(invalid_rows[["Timestamp", "Col3"]].to_string(index=False))
+
+        if len(sign_positions) > 1:
+            spacing = sign_positions["sign_position_m"].diff().dropna()
+            print(
+                "Sign spacing (m): "
+                f"min={spacing.min():.4f}, mean={spacing.mean():.4f}, max={spacing.max():.4f}"
+            )
+
+        print("--- End sign position parsing ---\n")
+
+    return sign_positions
+
+def calculate_mdev(df):
+    total_distance = df["delta_x"].sum()
+    if total_distance <= 0:
+        return float("nan")
+
+    return (df["deviation_m"] * df["delta_x"]).sum() / total_distance
+
+
+def add_reference_trajectory(position_df):
+    position_df["target_pos_m"] = position_df["targetLane"].apply(lane_to_meters)
+    position_df["target_pos_smooth"] = position_df["target_pos_m"].copy()
+
+    change_indices = position_df.index[position_df["targetLane"].diff() != 0].tolist()
+    for idx in change_indices:
+        if idx == 0:
+            continue
+
+        start_pos = position_df.loc[idx - 1, "target_pos_m"]
+        end_pos = position_df.loc[idx, "target_pos_m"]
+        start_time = position_df.loc[idx, "Timestamp"]
+        end_time = start_time + LANE_CHANGE_DURATION
+
+        mask = (position_df["Timestamp"] >= start_time) & (position_df["Timestamp"] <= end_time)
+        if mask.sum() == 0:
+            continue
+
+        t = position_df.loc[mask, "Timestamp"]
+        t_norm = (t - start_time) / LANE_CHANGE_DURATION
+        sigmoid = 1 / (1 + np.exp(-SIGMOID_STEEPNESS * (t_norm - 0.5)))
+        position_df.loc[mask, "target_pos_smooth"] = start_pos + sigmoid * (end_pos - start_pos)
+
+    return position_df
+
+
+def add_iso_reference_trajectory(position_df):
+    position_df["target_pos_m"] = position_df["targetLane"].apply(lane_to_meters)
+    position_df["target_pos_iso"] = position_df["target_pos_m"].copy()
+
+    change_indices = position_df.index[position_df["targetLane"].diff() != 0].tolist()
+    for idx in change_indices:
+        if idx == 0:
+            continue
+
+        start_pos = position_df.loc[idx - 1, "target_pos_m"]
+        end_pos = position_df.loc[idx, "target_pos_m"]
+
+        symbol_appears_m = position_df.loc[idx, "Meters"]
+        sign_position_m = symbol_appears_m + ISO_SYMBOL_APPEARS_BEFORE_SIGN_M
+        reference_start_m = sign_position_m - ISO_REFERENCE_START_BEFORE_SIGN_M
+        reference_end_m = sign_position_m - ISO_REFERENCE_END_BEFORE_SIGN_M
+
+        #print("ISO sign position:", sign_position_m)
+        #TODO use stated sign positions once figure out how offset works, see extract_sign_positions above.
+        # If not then inference from targetLane here is better for now
+
+        # rows where the reference should stay in the old lane
+        hold_mask = (
+            (position_df["Meters"] >= symbol_appears_m)
+            & (position_df["Meters"] < reference_start_m)
+        )
+        position_df.loc[hold_mask, "target_pos_iso"] = start_pos
+
+        # rows where the reference should transition between lanes
+        change_mask = (
+            (position_df["Meters"] >= reference_start_m)
+            & (position_df["Meters"] <= reference_end_m)
+        )
+        if change_mask.sum() == 0:
+            continue
+
+        progress = (
+            (position_df.loc[change_mask, "Meters"] - reference_start_m)
+            / (reference_end_m - reference_start_m)
+        )
+        position_df.loc[change_mask, "target_pos_iso"] = start_pos + progress * (end_pos - start_pos)
+
+    position_df["target_pos_smooth"] = position_df["target_pos_iso"]
+    return position_df
+
+
+################# Start analyze_lct_data #################
+########################################################
+
 def analyze_lct_data(raw_df, position_df,shape_detection, run_diagnostics=True):
     position_df = position_df.copy()
 
@@ -159,27 +290,10 @@ def analyze_lct_data(raw_df, position_df,shape_detection, run_diagnostics=True):
     )
 
     # Convert discrete target lanes into lateral positions and smooth transitions over time.
-    position_df["target_pos_m"] = position_df["targetLane"].apply(lane_to_meters)
-    position_df["target_pos_smooth"] = position_df["target_pos_m"].copy()
+    #position_df = add_reference_trajectory(position_df)
 
-    change_indices = position_df.index[position_df["targetLane"].diff() != 0].tolist()
-    for idx in change_indices:
-        if idx == 0:
-            continue
-
-        start_pos = position_df.loc[idx - 1, "target_pos_m"]
-        end_pos = position_df.loc[idx, "target_pos_m"]
-        start_time = position_df.loc[idx, "Timestamp"]
-        end_time = start_time + LANE_CHANGE_DURATION
-
-        mask = (position_df["Timestamp"] >= start_time) & (position_df["Timestamp"] <= end_time)
-        if mask.sum() == 0:
-            continue
-
-        t = position_df.loc[mask, "Timestamp"]
-        t_norm = (t - start_time) / LANE_CHANGE_DURATION
-        sigmoid = 1 / (1 + np.exp(-SIGMOID_STEEPNESS * (t_norm - 0.5)))
-        position_df.loc[mask, "target_pos_smooth"] = start_pos + sigmoid * (end_pos - start_pos)
+    #ISO version - compute based on distance from sign
+    position_df = add_iso_reference_trajectory(position_df)
 
     # Compare the driver's lateral position to the smooth reference trajectory.
     position_df["deviation_m"] = abs(position_df["LateralPos"] - position_df["target_pos_smooth"])
@@ -201,9 +315,7 @@ def analyze_lct_data(raw_df, position_df,shape_detection, run_diagnostics=True):
     position_df["delta_x"] = position_df["Meters"].diff().abs()
     position_df = position_df.dropna().reset_index(drop=True)
 
-    total_distance = position_df["delta_x"].sum()
-    weighted_deviation = (position_df["deviation_m"] * position_df["delta_x"]).sum()
-    mdev = weighted_deviation / total_distance if total_distance > 0 else float("nan")
+    mdev = calculate_mdev(position_df)
 
     # Mark intervals where the shape task is active and attach the current shape depth to each sample.
     shape_intervals = []
@@ -232,25 +344,17 @@ def analyze_lct_data(raw_df, position_df,shape_detection, run_diagnostics=True):
                 start_time = None
                 current_shape = None
 
-    #Extract mdev during active/inactive periods for comparison. TODO rename mdev_active, more clear
-    active = position_df[position_df["shape_active"] == 1]["deviation_m"]
-    inactive = position_df[position_df["shape_active"] == 0]["deviation_m"]
+    # Compute distance-weighted mean deviation during active shape-task periods.
+    active_df = position_df[position_df["shape_active"] == 1]
+    mdev_active = calculate_mdev(active_df)
 
     #Compute mdev for each shape depth for comparison
-    shape_active_df = position_df[position_df["shape_active"] == 1]
-
     mdev_rows = []
 
-    for shape_depth, group in shape_active_df.groupby("shape_depth"):
-        total_dx = group["delta_x"].sum()
-        mdev_value = (
-            (group["deviation_m"] * group["delta_x"]).sum() / total_dx
-            if total_dx > 0 else np.nan
-        )
-
+    for shape_depth, group in active_df.groupby("shape_depth"):
         mdev_rows.append({
             "shape_depth": shape_depth,
-            "mdev": mdev_value
+            "mdev": calculate_mdev(group)
         })
 
     mdev_by_shape = pd.DataFrame(mdev_rows, columns=["shape_depth", "mdev"])
@@ -258,13 +362,20 @@ def analyze_lct_data(raw_df, position_df,shape_detection, run_diagnostics=True):
     if not mdev_by_shape.empty:
         mdev_by_shape["mdev"] = mdev_by_shape["mdev"].round(4)
 
+    def get_detection_duration(timestamp, intervals):
+        for start, end in intervals:
+            if start <= timestamp <= end:
+                return round((timestamp - start), 4)
+        return None
+
     #Extract shape detection thresholds for the run
     for _, row in raw_df.iterrows():
         if row["Col2"] == "Confirmed that detected shape:":
            #Add to list of detected/undetected shapes
-           shape_detection.append(("Detected",row["Col3"]))
+           detection_duration = get_detection_duration(row["Timestamp"], shape_intervals)
+           shape_detection.append(("Detected",row["Col3"], detection_duration))
         elif row["Col2"] == "Could not detect shape:":
-           shape_detection.append(("Not detected",row["Col3"]))
+           shape_detection.append(("Not detected",row["Col3"], None))
             
     print("Detected shapes: ",shape_detection)
 
@@ -278,14 +389,14 @@ def analyze_lct_data(raw_df, position_df,shape_detection, run_diagnostics=True):
         "wrong_lane_time": wrong_lane_time,
         "wrong_lane_pct": wrong_lane_pct,
         "mdev": mdev,
+        "mdev_active": mdev_active,
         "shape_intervals": shape_intervals,
-        "active_mean": active.mean(),
-        "inactive_mean": inactive.mean(),
         "mdev_by_shape": mdev_by_shape,
     }
 
     return position_df, summary
-
+    ################# End analyze_lct_data #################
+    ########################################################
 
 def draw_lct_plot(ax, position_df, summary, base_name, label_fs=10, tick_fs=10, title_fs=12, legend_fs=10, metrics_fs=10, show_metrics=True):
     ax.plot(
@@ -324,11 +435,12 @@ def draw_lct_plot(ax, position_df, summary, base_name, label_fs=10, tick_fs=10, 
         "Lane L (limit)"
     ])
     ax.tick_params(axis="both", labelsize=tick_fs)
-    ax.set_title(f"LCT Analysis: {base_name} (mdev = {summary['mdev']:.3f} m)", fontsize=title_fs)
+    ax.set_title(f"LCT Analysis: {base_name} (active mdev = {summary['mdev_active']:.3f} m)", fontsize=title_fs)
 
     metrics_text = (
         f"Missed: {summary['missed_lane_changes']}\n"
         f"Wrong lane: {summary['wrong_lane_pct']:.2f}%\n"
+        f"Total mdev: {summary['mdev']:.3f} m\n"
         f"Avg lane change: {summary['avg_lane_change_time']:.2f} s"
     )
 
@@ -362,12 +474,11 @@ def build_plot_figure(position_df, summary, base_name, pdf_layout=False):
     summary_text = (
         f"\n\n"
         f"Total mdev: {summary['mdev']:.4f} metres\n"
+        f"Active mdev: {summary['mdev_active']:.4f} metres\n"
         f"Missed lane changes: {summary['missed_lane_changes']}\n"
         f"Wrong-lane time: {summary['wrong_lane_time']:.3f} s\n"
         f"Percentage of time in wrong lane: {summary['wrong_lane_pct']:.2f}%\n"
         f"Average lane-change time: {summary['avg_lane_change_time']:.3f} s\n"
-        f"Active mean: {summary['active_mean']:.3f}\n"
-        f"Inactive mean: {summary['inactive_mean']:.3f}\n"
         f"\nmdev by shape depth:\n\n{summary['mdev_by_shape'].to_string(index=False)}\n\n"
     )
 
@@ -415,15 +526,41 @@ def build_plot_figure(position_df, summary, base_name, pdf_layout=False):
 
     return fig
 
-def build_pdf_summary_page(shape_detection):
+def build_pdf_summary_pages(shape_detection):
      
-    fig = plt.figure(figsize=(8.27, 11.69))
-    summary_text = "\n".join(f"{detected}: {depth}" for detected, depth in shape_detection)
+    summary_fig = plt.figure(figsize=(8.27, 11.69))
+    summary_text = "\n".join(
+        f"{detected}: {depth}" if duration is None else f"{detected}: {depth} ({duration:.2f}s)"
+        for detected, depth, duration in shape_detection
+    )
+
+    detected_time_rows = [
+        {
+            "shape_type": depth,
+            "detection_time": duration,
+        }
+        for detected, depth, duration in shape_detection
+        if detected == "Detected" and duration is not None
+    ]
+
+    if detected_time_rows:
+        avg_detection_times = (
+            pd.DataFrame(detected_time_rows)
+            .groupby("shape_type", as_index=False)
+            .agg(
+                avg_detection_time=("detection_time", "mean"),
+                num_detections=("detection_time", "count"),
+            )
+        )
+        avg_detection_times["avg_detection_time"] = avg_detection_times["avg_detection_time"].round(4)
+        avg_detection_times_text = avg_detection_times.to_string(index=False)
+    else:
+        avg_detection_times_text = "No detected shapes with detection times."
 
     #List of depths detected during the run. TODO move to other analysis? 
     detected_depths = []
     prefix = "Square"
-    for detected, depth in shape_detection:
+    for detected, depth, duration in shape_detection:
         if detected == "Detected" and depth.startswith(prefix):
             #Extract the depth value from the string in the log
             detected_depths.append(int(depth[len(prefix):len(prefix)+2]))
@@ -434,11 +571,16 @@ def build_pdf_summary_page(shape_detection):
     print("detected_depths: ", detected_depths)
     print("Mean detected depth: ", avg_detected_depth)
 
-    fig.text(0.05, 0.95, "Staircase Method Summary", fontsize=14, fontweight="bold", ha="left", va="top")
-    fig.text(0.05, 0.85,  summary_text, ha="left", va="top")
-    fig.text(0.05, 0.1, f"Average detected depth: {avg_detected_depth} mm", fontweight="bold", ha="left", va="bottom")
+    summary_fig.text(0.05, 0.95, "Staircase Method Summary", fontsize=14, fontweight="bold", ha="left", va="top")
+    summary_fig.text(0.05, 0.85,  summary_text, ha="left", va="top")
 
-    return fig
+    detection_times_fig = plt.figure(figsize=(8.27, 11.69))
+    detection_times_fig.text(0.05, 0.95, "Detection Time Summary", fontsize=14, fontweight="bold", ha="left", va="top")
+    detection_times_fig.text(0.05, 0.85, "Average detection time by shape type:", fontweight="bold", ha="left", va="top")
+    detection_times_fig.text(0.05, 0.82, avg_detection_times_text, ha="left", va="top", fontsize=9, family="monospace")
+    detection_times_fig.text(0.05, 0.68, f"Average detected depth: {avg_detected_depth} mm", fontweight="bold", ha="left", va="top")
+
+    return summary_fig, detection_times_fig
 
 def write_csv_png(input_csv, position_df, summary, png_fig, figures_output_dir, processed_output_dir):
     input_dir = os.path.dirname(os.path.abspath(input_csv))
@@ -449,17 +591,22 @@ def write_csv_png(input_csv, position_df, summary, png_fig, figures_output_dir, 
     print(f"Wrote CSV file to: {output_csv_path}")
 
     png_output_path = os.path.join(figures_output_dir, f"{base_name}_graph.png")
+
+    #Debug to zoom in graphs
+    png_fig.show()
+    plt.pause(0.1)
+    input("Inspect the plot, then press Enter to save the PNG...")
+
     png_fig.savefig(png_output_path, bbox_inches="tight", dpi=300)
     print(f"Wrote PNG file to: {png_output_path}")
 
 def print_statistics(summary):
     print(f"Total mdev: {summary['mdev']:.4f} m")
+    print(f"Active mdev: {summary['mdev_active']:.4f} m")
     print(f"Missed lane changes: {summary['missed_lane_changes']}")
     print(f"Wrong-lane time: {summary['wrong_lane_time']:.3f} s")
     print(f"Percentage of time in wrong lane: {summary['wrong_lane_pct']:.2f}%")
     print(f"Average lane-change time: {summary['avg_lane_change_time']:.3f} s")
-    print(f"Active mean: {summary['active_mean']:.3f}")
-    print(f"Inactive mean: {summary['inactive_mean']:.3f}")
     print("mdev by shape depth:")
     print(summary["mdev_by_shape"].to_string(index=False))
 
@@ -468,8 +615,17 @@ def print_statistics(summary):
         print(f"Interval {i}: {start} -> {end}")
 
 def write_summary_to_csv(all_summaries, summary_csv_output_path):
+
+    summary_cols = [
+        "missed_lane_changes",
+        "wrong_lane_time",
+        "wrong_lane_pct",
+        "mdev",
+        "mdev_active",
+    ]
     #Create pandas dataframe from summary, keep specified columns only
-    all_summaries_df = pd.DataFrame(all_summaries)[["missed_lane_changes", "wrong_lane_time", "wrong_lane_pct", "mdev", "active_mean", "inactive_mean"]].round(4)
+    all_summaries_df = pd.DataFrame(all_summaries)[summary_cols]
+    all_summaries_df[summary_cols] = all_summaries_df[summary_cols].apply(pd.to_numeric, errors="coerce").round(4)
 
     #Insert participant ID as first column
     all_summaries_df.insert(0, "participant_id", participant_id)
@@ -477,6 +633,38 @@ def write_summary_to_csv(all_summaries, summary_csv_output_path):
     #Write file
     all_summaries_df.to_csv(summary_csv_output_path, index=False)
     print("Wrote summary to CSV: ", summary_csv_output_path)
+
+def write_shape_detection_times_to_csv(shape_detection, output_path):
+    detected_rows = [
+        {
+            "shape_type": shape_type,
+            "detection_time": detection_duration,
+        }
+        for status, shape_type, detection_duration in shape_detection
+        if status == "Detected" and detection_duration is not None
+    ]
+
+    detection_times_df = pd.DataFrame(detected_rows)
+
+    if detection_times_df.empty:
+        avg_detection_times_df = pd.DataFrame(
+            columns=["participant_id", "shape_type", "avg_detection_time", "num_detections"]
+        )
+    else:
+        avg_detection_times_df = (
+            detection_times_df
+            .groupby("shape_type", as_index=False)
+            .agg(
+                avg_detection_time=("detection_time", "mean"),
+                num_detections=("detection_time", "count"),
+            )
+        )
+
+        avg_detection_times_df["avg_detection_time"] = avg_detection_times_df["avg_detection_time"].round(4)
+        avg_detection_times_df.insert(0, "participant_id", participant_id)
+
+    avg_detection_times_df.to_csv(output_path, index=False)
+    print("Wrote shape detection times to CSV: ", output_path)
 
 ##################################################
 ################### Main program #################
@@ -516,6 +704,7 @@ if __name__ == "__main__":
     #Process all files for the participant, store summary with graphs in single PDF, CSV for statistics
     summary_pdf_output_path = os.path.normpath(os.path.join(sys.argv[1], "Summary_graphs.pdf"))
     summary_csv_output_path = os.path.normpath(os.path.join(sys.argv[1], "Summary_stats.csv"))
+    shape_detection_times_output_path = os.path.normpath(os.path.join(sys.argv[1], "Shape_detection_times.csv"))
 
     #Store all statistics for each run to CSV. To compare for full participant group later
     summary_all_runs = []
@@ -527,6 +716,7 @@ if __name__ == "__main__":
             #print("Base name: ", base_name)
             
             raw_df, position_df = load_lct_data(input_file)
+            sign_positions = extract_sign_positions(raw_df, debug=True)
             position_df, summary = analyze_lct_data(raw_df, position_df,shape_detection, run_diagnostics=True)
             summary_all_runs.append(summary)
             #print_statistics(summary)
@@ -539,12 +729,15 @@ if __name__ == "__main__":
             pdf.savefig(pdf_fig)
             plt.close(png_fig)
         
-        #Write staircase summary page
-        sum_page = build_pdf_summary_page(shape_detection)
-        pdf.savefig(sum_page)
+        #Write staircase summary pages
+        sum_pages = build_pdf_summary_pages(shape_detection)
+        for sum_page in sum_pages:
+            pdf.savefig(sum_page)
+            plt.close(sum_page)
 
         #Write summary of all runs to CSV
         write_summary_to_csv(summary_all_runs, summary_csv_output_path)
+        write_shape_detection_times_to_csv(shape_detection, shape_detection_times_output_path)
 
         #TODO write overall summary page (total mdev avg for active/inactive, detection thresh)
         plt.close(pdf_fig)
