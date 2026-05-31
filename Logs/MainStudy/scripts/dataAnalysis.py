@@ -314,6 +314,100 @@ def build_reversal_threshold_lines(shape_detection, expected_reversals=8):
     return threshold_lines
 
 
+def build_mdev_by_shape_summary(all_summaries):
+    mdev_by_shape_dfs = [
+        summary["mdev_by_shape"]
+        for summary in all_summaries
+        if "mdev_by_shape" in summary and not summary["mdev_by_shape"].empty
+    ]
+
+    if not mdev_by_shape_dfs:
+        return pd.DataFrame(columns=["shape_depth", "mdev"])
+
+    all_mdev_by_shape = pd.concat(mdev_by_shape_dfs, ignore_index=True)
+    all_mdev_by_shape["mdev"] = pd.to_numeric(all_mdev_by_shape["mdev"], errors="coerce")
+
+    mean_mdev_by_shape = (
+        all_mdev_by_shape
+        .dropna(subset=["mdev"])
+        .groupby("shape_depth", as_index=False)
+        .agg(mdev=("mdev", "mean"))
+    )
+
+    mean_mdev_by_shape["shape_depth_mm"] = mean_mdev_by_shape["shape_depth"].apply(extract_shape_depth_mm)
+    mean_mdev_by_shape = (
+        mean_mdev_by_shape
+        .sort_values(["shape_depth_mm", "shape_depth"], na_position="last")
+        .drop(columns="shape_depth_mm")
+        .reset_index(drop=True)
+    )
+    mean_mdev_by_shape["mdev"] = mean_mdev_by_shape["mdev"].round(4)
+
+    return mean_mdev_by_shape
+
+
+def build_detection_times_by_shape(shape_detection):
+    detected_rows = [
+        {
+            "shape_depth": shape_depth,
+            "avg_detection_time": detection_duration,
+        }
+        for status, shape_depth, detection_duration in shape_detection
+        if status == "Detected" and detection_duration is not None
+    ]
+
+    if not detected_rows:
+        return pd.DataFrame(columns=["shape_depth", "avg_detection_time", "num_detections"])
+
+    detection_times_df = pd.DataFrame(detected_rows)
+    detection_times_by_shape = (
+        detection_times_df
+        .groupby("shape_depth", as_index=False)
+        .agg(
+            avg_detection_time=("avg_detection_time", "mean"),
+            num_detections=("avg_detection_time", "count"),
+        )
+    )
+
+    return detection_times_by_shape
+
+
+def build_statistics_by_shape_depth(shape_detection, all_summaries):
+    mean_mdev_by_shape = build_mdev_by_shape_summary(all_summaries)
+    detection_times_by_shape = build_detection_times_by_shape(shape_detection)
+
+    statistics_by_shape_depth = pd.merge(
+        mean_mdev_by_shape,
+        detection_times_by_shape,
+        on="shape_depth",
+        how="outer",
+    )
+
+    if statistics_by_shape_depth.empty:
+        return pd.DataFrame(columns=["shape_depth", "mdev", "avg_detection_time", "num_detections"])
+
+    statistics_by_shape_depth["shape_depth_mm"] = statistics_by_shape_depth["shape_depth"].apply(extract_shape_depth_mm)
+    statistics_by_shape_depth = (
+        statistics_by_shape_depth
+        .sort_values(["shape_depth_mm", "shape_depth"], na_position="last")
+        .drop(columns="shape_depth_mm")
+        .reset_index(drop=True)
+    )
+
+    for col in ["mdev", "avg_detection_time"]:
+        statistics_by_shape_depth[col] = pd.to_numeric(
+            statistics_by_shape_depth[col],
+            errors="coerce",
+        ).round(4)
+
+    statistics_by_shape_depth["num_detections"] = pd.to_numeric(
+        statistics_by_shape_depth["num_detections"],
+        errors="coerce",
+    ).fillna(0).astype("Int64")
+
+    return statistics_by_shape_depth
+
+
 def add_reference_trajectory(position_df):
     position_df["target_pos_m"] = position_df["targetLane"].apply(lane_to_meters)
     position_df["target_pos_smooth"] = position_df["target_pos_m"].copy()
@@ -655,7 +749,7 @@ def build_plot_figure(position_df, summary, base_name, pdf_layout=False):
 
     return fig
 
-def build_pdf_summary_pages(shape_detection, include_reversal_thresholds=True):
+def build_pdf_summary_pages(shape_detection, statistics_by_shape_depth=None, include_reversal_thresholds=True):
     summary_lines = []
 
     def add_summary_line(line_text, bold=False):
@@ -681,7 +775,7 @@ def build_pdf_summary_pages(shape_detection, include_reversal_thresholds=True):
         reversal_threshold_lines = build_reversal_threshold_lines(shape_detection)
         if reversal_threshold_lines:
             add_summary_line("")
-            add_summary_line("Reversal Thresholds:")
+            add_summary_line("Reversal Thresholds:", bold=True)
             for threshold_line in reversal_threshold_lines:
                 if isinstance(threshold_line, tuple):
                     line_text, bold = threshold_line
@@ -721,29 +815,6 @@ def build_pdf_summary_pages(shape_detection, include_reversal_thresholds=True):
             )
         summary_pages.append(summary_fig)
 
-    detected_time_rows = [
-        {
-            "shape_type": depth,
-            "detection_time": duration,
-        }
-        for detected, depth, duration in shape_detection
-        if detected == "Detected" and duration is not None
-    ]
-
-    if detected_time_rows:
-        avg_detection_times = (
-            pd.DataFrame(detected_time_rows)
-            .groupby("shape_type", as_index=False)
-            .agg(
-                avg_detection_time=("detection_time", "mean"),
-                num_detections=("detection_time", "count"),
-            )
-        )
-        avg_detection_times["avg_detection_time"] = avg_detection_times["avg_detection_time"].round(4)
-        avg_detection_times_text = avg_detection_times.to_string(index=False)
-    else:
-        avg_detection_times_text = "No detected shapes with detection times."
-
     #List of depths detected during the run. TODO move to other analysis? 
     detected_depths = []
     prefix = "Square"
@@ -752,22 +823,27 @@ def build_pdf_summary_pages(shape_detection, include_reversal_thresholds=True):
             #Extract the depth value from the string in the log
             detected_depths.append(int(depth[len(prefix):len(prefix)+2]))
     
-    avg_detected_depth = round(statistics.mean(detected_depths), 4) if detected_depths else None
+    mean_detected_depth = round(statistics.mean(detected_depths), 4) if detected_depths else None
     #TODO not really true though? Should be based on reversals otherwise skewed with first detections from 7 - 5. Threshold is the one above the reversal (if cant detect 2 then its 3 etc). Do later
     
     print("detected_depths: ", detected_depths)
-    print("Mean detected depth: ", avg_detected_depth)
+    print("Mean detected depth: ", mean_detected_depth)
 
     detection_times_fig = plt.figure(figsize=(8.27, 11.69))
-    detection_times_fig.text(0.05, 0.95, "Detection Time Summary", fontsize=14, fontweight="bold", ha="left", va="top")
-    detection_times_fig.text(0.05, 0.85, "Average detection time by shape type:", fontweight="bold", ha="left", va="top")
-    detection_times_fig.text(0.05, 0.82, avg_detection_times_text, ha="left", va="top", fontsize=9, family="monospace")
-    avg_detected_depth_text = (
-        f"Average detected depth: {avg_detected_depth} mm"
-        if avg_detected_depth is not None
-        else "Average detected depth: N/A"
+    detection_times_fig.text(0.05, 0.95, "Statistics by Shape Depth", fontsize=14, fontweight="bold", ha="left", va="top")
+
+    if statistics_by_shape_depth is not None and not statistics_by_shape_depth.empty:
+        statistics_by_shape_text = statistics_by_shape_depth.to_string(index=False)
+    else:
+        statistics_by_shape_text = "No statistics by shape depth data."
+
+    detection_times_fig.text(0.05, 0.85, statistics_by_shape_text, ha="left", va="top", fontsize=9, family="monospace")
+    mean_detected_depth_text = (
+        f"Mean detected depth: {mean_detected_depth} mm"
+        if mean_detected_depth is not None
+        else "Mean detected depth: N/A"
     )
-    detection_times_fig.text(0.05, 0.68, avg_detected_depth_text, fontweight="bold", ha="left", va="top")
+    detection_times_fig.text(0.05, 0.60, mean_detected_depth_text, fontweight="bold", ha="left", va="top")
 
     return *summary_pages, detection_times_fig
 
@@ -823,37 +899,11 @@ def write_summary_to_csv(all_summaries, summary_csv_output_path):
     all_summaries_df.to_csv(summary_csv_output_path, index=False)
     print("Wrote summary to CSV: ", summary_csv_output_path)
 
-def write_shape_detection_times_to_csv(shape_detection, output_path):
-    detected_rows = [
-        {
-            "shape_type": shape_type,
-            "detection_time": detection_duration,
-        }
-        for status, shape_type, detection_duration in shape_detection
-        if status == "Detected" and detection_duration is not None
-    ]
-
-    detection_times_df = pd.DataFrame(detected_rows)
-
-    if detection_times_df.empty:
-        avg_detection_times_df = pd.DataFrame(
-            columns=["participant_id", "shape_type", "avg_detection_time", "num_detections"]
-        )
-    else:
-        avg_detection_times_df = (
-            detection_times_df
-            .groupby("shape_type", as_index=False)
-            .agg(
-                avg_detection_time=("detection_time", "mean"),
-                num_detections=("detection_time", "count"),
-            )
-        )
-
-        avg_detection_times_df["avg_detection_time"] = avg_detection_times_df["avg_detection_time"].round(4)
-        avg_detection_times_df.insert(0, "participant_id", participant_id)
-
-    avg_detection_times_df.to_csv(output_path, index=False)
-    print("Wrote shape detection times to CSV: ", output_path)
+def write_statistics_by_shape_depth_to_csv(statistics_by_shape_depth, output_path):
+    statistics_output_df = statistics_by_shape_depth.copy()
+    statistics_output_df.insert(0, "participant_id", participant_id)
+    statistics_output_df.to_csv(output_path, index=False, float_format="%.4f")
+    print("Wrote statistics by shape depth to CSV: ", output_path)
 
 def build_threshold_detection_summary_df(shape_detection, expected_reversals=8):
     thresholds_by_reversal, mean_threshold = calculate_reversal_thresholds(
@@ -922,7 +972,7 @@ if __name__ == "__main__":
     #Process all files for the participant, store summary with graphs in single PDF, CSV for statistics
     summary_pdf_output_path = os.path.normpath(os.path.join(sys.argv[1], "Summary_graphs.pdf"))
     summary_csv_output_path = os.path.normpath(os.path.join(sys.argv[1], "Summary_stats.csv"))
-    shape_detection_times_output_path = os.path.normpath(os.path.join(sys.argv[1], "Shape_detection_times.csv"))
+    statistics_by_shape_depth_output_path = os.path.normpath(os.path.join(sys.argv[1], "statistics_by_shape_depth.csv"))
     threshold_detection_summary_output_path = os.path.normpath(os.path.join(sys.argv[1], "threshold_detection_summary.csv"))
 
     #Store all statistics for each run to CSV. To compare for full participant group later
@@ -948,15 +998,22 @@ if __name__ == "__main__":
             pdf.savefig(pdf_fig)
             plt.close(png_fig)
         
+        statistics_by_shape_depth = build_statistics_by_shape_depth(shape_detection, summary_all_runs)
+        print("\nStatistics by shape depth:")
+        if statistics_by_shape_depth.empty:
+            print("No statistics by shape depth data.")
+        else:
+            print(statistics_by_shape_depth.to_string(index=False))
+
         #Write staircase summary pages
-        sum_pages = build_pdf_summary_pages(shape_detection)
+        sum_pages = build_pdf_summary_pages(shape_detection, statistics_by_shape_depth=statistics_by_shape_depth)
         for sum_page in sum_pages:
             pdf.savefig(sum_page)
             plt.close(sum_page)
 
         #Write summary of all runs to CSV
         write_summary_to_csv(summary_all_runs, summary_csv_output_path)
-        write_shape_detection_times_to_csv(shape_detection, shape_detection_times_output_path)
+        write_statistics_by_shape_depth_to_csv(statistics_by_shape_depth, statistics_by_shape_depth_output_path)
         write_threshold_detection_summary(
             shape_detection,
             threshold_detection_summary_output_path,

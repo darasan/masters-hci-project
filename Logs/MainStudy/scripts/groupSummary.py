@@ -22,6 +22,21 @@ def sort_by_participant_id(df):
     )
 
 
+def shape_depth_sort_value(shape_depth):
+    match = re.search(r"\d+(?:\.\d+)?", str(shape_depth))
+    return float(match.group(0)) if match else float("inf")
+
+
+def sort_by_shape_depth(df):
+    return (
+        df
+        .assign(_shape_depth_sort=df["shape_depth"].map(shape_depth_sort_value))
+        .sort_values(["_shape_depth_sort", "shape_depth"])
+        .drop(columns="_shape_depth_sort")
+        .reset_index(drop=True)
+    )
+
+
 def write_participant_active_inactive_plot(group_df, output_dir):
     participant_means = (
         group_df
@@ -74,6 +89,9 @@ def write_group_threshold_detection_summary(threshold_detection_summary_files, o
 
     group_threshold_df = pd.concat(threshold_dfs, ignore_index=True)
     group_threshold_df = sort_by_participant_id(group_threshold_df)
+    group_threshold_df = group_threshold_df[
+        ["participant_id"] + [f"reversal_{i}" for i in range(1, 9)] + ["mean_threshold"]
+    ]
 
     threshold_cols = [col for col in group_threshold_df.columns if col != "participant_id"]
     group_threshold_df[threshold_cols] = group_threshold_df[threshold_cols].apply(
@@ -154,6 +172,52 @@ def write_group_threshold_detection_summary(threshold_detection_summary_files, o
     plt.close(fig)
     print(f"Wrote group threshold detection summary table to: {png_output_path}")
 
+def write_group_statistics_by_shape_depth(statistics_by_shape_depth_files, output_dir):
+    statistics_dfs = []
+
+    for file in sorted(statistics_by_shape_depth_files, key=lambda path: participant_sort_value(path.parent.name)):
+        statistics_df = pd.read_csv(file)
+        if statistics_df.empty:
+            continue
+
+        statistics_dfs.append(statistics_df)
+
+    if not statistics_dfs:
+        print("\nNo usable statistics by shape depth CSV files found.")
+        return
+
+    group_statistics_by_shape_depth_df = pd.concat(statistics_dfs, ignore_index=True)
+    group_statistics_by_shape_depth_df = sort_by_participant_id(group_statistics_by_shape_depth_df)
+
+    numeric_cols = [
+        col
+        for col in group_statistics_by_shape_depth_df.columns
+        if col not in ["participant_id", "shape_depth"]
+    ]
+    group_statistics_by_shape_depth_df[numeric_cols] = group_statistics_by_shape_depth_df[numeric_cols].apply(
+        pd.to_numeric,
+        errors="coerce",
+    )
+
+    combined_csv_path = output_dir / "statistics_by_shape_depth_combined.csv"
+    group_statistics_by_shape_depth_df.to_csv(combined_csv_path, index=False, float_format="%.4f")
+    print(f"\nWrote combined statistics by shape depth to: {combined_csv_path}")
+
+    group_statistics_by_shape_depth_means = (
+        group_statistics_by_shape_depth_df
+        .groupby("shape_depth", as_index=False)[numeric_cols]
+        .mean()
+        .round(4)
+    )
+    group_statistics_by_shape_depth_means = sort_by_shape_depth(group_statistics_by_shape_depth_means)
+
+    print("\nGroup means by shape depth:")
+    print(group_statistics_by_shape_depth_means.to_string(index=False))
+
+    means_csv_path = output_dir / "statistics_by_shape_depth_group_means.csv"
+    group_statistics_by_shape_depth_means.to_csv(means_csv_path, index=False, float_format="%.4f")
+    print(f"Wrote group means by shape depth to: {means_csv_path}")
+
 #Root dir is "data" with all participants directories inside. Iterate over these to build summary
 root_dir = Path(os.path.normpath(os.path.join(os.getcwd(), "..", "data")))
 summary_output_dir = Path(os.path.join(os.getcwd(),"..", "Summary"))
@@ -163,11 +227,11 @@ os.makedirs(summary_output_dir, exist_ok=True)
 
 #Match on this filename for each participant
 summary_pattern = "Summary_stats.csv"
-shape_detection_times_pattern = "Shape_detection_times.csv"
+statistics_by_shape_depth_pattern = "statistics_by_shape_depth.csv"
 threshold_detection_summary_pattern = "threshold_detection_summary.csv"
 
 summary_files = []
-shape_detection_times_files = []
+statistics_by_shape_depth_files = []
 threshold_detection_summary_files = []
 
 for participant_dir in root_dir.iterdir():
@@ -177,8 +241,8 @@ for participant_dir in root_dir.iterdir():
     matches = list(participant_dir.glob(summary_pattern))
     summary_files.extend(matches)
 
-    shape_detection_times_matches = list(participant_dir.glob(shape_detection_times_pattern))
-    shape_detection_times_files.extend(shape_detection_times_matches)
+    statistics_by_shape_depth_matches = list(participant_dir.glob(statistics_by_shape_depth_pattern))
+    statistics_by_shape_depth_files.extend(statistics_by_shape_depth_matches)
 
     threshold_detection_summary_matches = list(participant_dir.glob(threshold_detection_summary_pattern))
     threshold_detection_summary_files.extend(threshold_detection_summary_matches)
@@ -216,50 +280,16 @@ group_means_csv_path = summary_output_dir / "group_summary_means.csv"
 group_means_df.to_csv(group_means_csv_path, index=False)
 print(f"Wrote group means to: {group_means_csv_path}")
 
-if not shape_detection_times_files:
-    print("\nNo participant shape detection time CSV files found.")
+if not statistics_by_shape_depth_files:
+    print("\nNo participant statistics by shape depth CSV files found.")
 else:
-    shape_detection_times_files = sorted(shape_detection_times_files, key=lambda path: participant_sort_value(path.parent.name))
-    print("\nFound shape detection time files:")
-    print("\n".join(str(path) for path in shape_detection_times_files))
-
-    shape_detection_times_dfs = [pd.read_csv(file) for file in shape_detection_times_files]
-    group_shape_detection_times_df = pd.concat(shape_detection_times_dfs, ignore_index=True)
-
-    combined_shape_detection_times_csv_path = summary_output_dir / "group_shape_detection_times_combined.csv"
-    group_shape_detection_times_df.to_csv(combined_shape_detection_times_csv_path, index=False)
-    print(f"Wrote combined shape detection times to: {combined_shape_detection_times_csv_path}")
-
-    group_shape_detection_times_df["weighted_detection_time"] = (
-        group_shape_detection_times_df["avg_detection_time"]
-        * group_shape_detection_times_df["num_detections"]
+    statistics_by_shape_depth_files = sorted(
+        statistics_by_shape_depth_files,
+        key=lambda path: participant_sort_value(path.parent.name),
     )
-
-    group_shape_detection_times = (
-        group_shape_detection_times_df
-        .groupby("shape_type", as_index=False)
-        .agg(
-            total_detection_time=("weighted_detection_time", "sum"),
-            total_detections=("num_detections", "sum"),
-            num_participants=("participant_id", "nunique"),
-        )
-    )
-
-    group_shape_detection_times["group_avg_detection_time"] = (
-        group_shape_detection_times["total_detection_time"]
-        / group_shape_detection_times["total_detections"]
-    )
-
-    group_shape_detection_times = group_shape_detection_times[
-        ["shape_type", "group_avg_detection_time", "total_detections", "num_participants"]
-    ].round(4)
-
-    print("\nGroup average detection time by shape type:")
-    print(group_shape_detection_times.to_string(index=False))
-
-    group_shape_detection_times_csv_path = summary_output_dir / "group_shape_detection_times_means.csv"
-    group_shape_detection_times.to_csv(group_shape_detection_times_csv_path, index=False)
-    print(f"Wrote group shape detection times to: {group_shape_detection_times_csv_path}")
+    print("\nFound statistics by shape depth files:")
+    print("\n".join(str(path) for path in statistics_by_shape_depth_files))
+    write_group_statistics_by_shape_depth(statistics_by_shape_depth_files, summary_output_dir)
 
 if not threshold_detection_summary_files:
     print("\nNo participant threshold detection summary CSV files found.")
