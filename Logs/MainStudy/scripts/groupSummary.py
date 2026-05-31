@@ -2,7 +2,24 @@ from pathlib import Path
 import pandas as pd
 import os
 import sys
+import re
 import matplotlib.pyplot as plt
+import scipy.stats as stats
+
+
+def participant_sort_value(participant_id):
+    match = re.search(r"\d+", str(participant_id))
+    return int(match.group(0)) if match else float("inf")
+
+
+def sort_by_participant_id(df):
+    return (
+        df
+        .assign(_participant_sort=df["participant_id"].map(participant_sort_value))
+        .sort_values(["_participant_sort", "participant_id"])
+        .drop(columns="_participant_sort")
+        .reset_index(drop=True)
+    )
 
 
 def write_participant_active_inactive_plot(group_df, output_dir):
@@ -41,6 +58,102 @@ def write_participant_active_inactive_plot(group_df, output_dir):
     plt.close()
     print(f"Wrote participant active/inactive mdev plot to: {plot_output_path}")
 
+def write_group_threshold_detection_summary(threshold_detection_summary_files, output_dir):
+    threshold_dfs = []
+
+    for file in sorted(threshold_detection_summary_files, key=lambda path: participant_sort_value(path.parent.name)):
+        threshold_df = pd.read_csv(file)
+        if threshold_df.empty:
+            continue
+
+        threshold_dfs.append(threshold_df)
+
+    if not threshold_dfs:
+        print("\nNo usable threshold detection summary CSV files found.")
+        return
+
+    group_threshold_df = pd.concat(threshold_dfs, ignore_index=True)
+    group_threshold_df = sort_by_participant_id(group_threshold_df)
+
+    threshold_cols = [col for col in group_threshold_df.columns if col != "participant_id"]
+    group_threshold_df[threshold_cols] = group_threshold_df[threshold_cols].apply(
+        pd.to_numeric,
+        errors="coerce",
+    ).round(4)
+
+    #Print to console
+    print("\nThreshold detection summary:")
+    print(group_threshold_df.to_string(index=False))
+
+    #Calculate group mean and confidence interval. Take mean of all participant means, so equally weighted per participant (P6 has only 6 reversals)
+    participant_means = pd.to_numeric(
+    group_threshold_df["mean_threshold"],
+    errors="coerce"
+    ).dropna()
+
+    n = len(participant_means)
+    mean = participant_means.mean()
+    sem = stats.sem(participant_means)
+
+    ci_low, ci_high = stats.t.interval(
+    confidence=0.95,
+    df=n - 1,
+    loc=mean,
+    scale=sem
+    )
+
+    print(f"\nGroup mean: {mean:.4f}")
+    print(f"95% CI: [{ci_low:.4f}, {ci_high:.4f}]")
+
+    #Write to CSV
+    combined_csv_path = output_dir / "threshold_detection_summary_combined.csv"
+    group_threshold_df.to_csv(combined_csv_path, index=False, float_format="%.4f")
+    print(f"\nWrote combined threshold detection summary to: {combined_csv_path}")
+
+    #Create table and write to PNG
+    display_df = group_threshold_df.copy()
+    display_df.columns = ["ID"] + [f"Rev {i}" for i in range(1, 9)] + ["Mean"]
+    display_df = display_df.fillna("")
+
+    for col in display_df.columns[1:]:
+        display_df[col] = display_df[col].apply(
+            lambda value: "" if value == "" else f"{float(value):.4f}"
+        )
+
+    fig_height = max(2.0, 0.35 * len(display_df) + 0.8)
+    fig, ax = plt.subplots(figsize=(9.5, fig_height))
+    ax.axis("off")
+
+    col_widths = [0.065] + [0.081] * 8 + [0.09]
+    table = ax.table(
+        cellText=display_df.values,
+        colLabels=display_df.columns,
+        cellLoc="center",
+        colWidths=col_widths,
+        loc="center",
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(7.5)
+    table.scale(1, 1.3)
+
+    for (row, col), cell in table.get_celld().items():
+        cell.PAD = 0.02
+        cell.set_edgecolor("#4a4a4a")
+        cell.set_linewidth(0.6)
+        if row == 0:
+            cell.set_facecolor("#e8e8e8")
+            cell.set_text_props(weight="bold")
+        elif col == len(display_df.columns) - 1:
+            cell.set_facecolor("#f5f5f5")
+            cell.set_text_props(weight="bold")
+        else:
+            cell.set_facecolor("white")
+
+    png_output_path = output_dir / "threshold_detection_summary_table.png"
+    fig.savefig(png_output_path, bbox_inches="tight", dpi=300)
+    plt.close(fig)
+    print(f"Wrote group threshold detection summary table to: {png_output_path}")
+
 #Root dir is "data" with all participants directories inside. Iterate over these to build summary
 root_dir = Path(os.path.normpath(os.path.join(os.getcwd(), "..", "data")))
 summary_output_dir = Path(os.path.join(os.getcwd(),"..", "Summary"))
@@ -51,9 +164,11 @@ os.makedirs(summary_output_dir, exist_ok=True)
 #Match on this filename for each participant
 summary_pattern = "Summary_stats.csv"
 shape_detection_times_pattern = "Shape_detection_times.csv"
+threshold_detection_summary_pattern = "threshold_detection_summary.csv"
 
 summary_files = []
 shape_detection_times_files = []
+threshold_detection_summary_files = []
 
 for participant_dir in root_dir.iterdir():
     if not participant_dir.is_dir():
@@ -65,25 +180,29 @@ for participant_dir in root_dir.iterdir():
     shape_detection_times_matches = list(participant_dir.glob(shape_detection_times_pattern))
     shape_detection_times_files.extend(shape_detection_times_matches)
 
+    threshold_detection_summary_matches = list(participant_dir.glob(threshold_detection_summary_pattern))
+    threshold_detection_summary_files.extend(threshold_detection_summary_matches)
+
 if not summary_files:
     raise FileNotFoundError("No participant summary CSV files found.")
 
-summary_files = sorted(summary_files)
+summary_files = sorted(summary_files, key=lambda path: participant_sort_value(path.parent.name))
 print("Found summary files:")
 print("\n".join(str(path) for path in summary_files))
 
 all_dfs = [pd.read_csv(file) for file in summary_files]
 group_df = pd.concat(all_dfs, ignore_index=True)
-group_df["active_mean"] = pd.to_numeric(group_df["active_mean"], errors="coerce")
-group_df["inactive_mean"] = pd.to_numeric(group_df["inactive_mean"], errors="coerce")
-
+group_df = sort_by_participant_id(group_df)
+#Disable, columns no longer exist. Keep for use when have mdev calc sorted
+#group_df["active_mean"] = pd.to_numeric(group_df["active_mean"], errors="coerce")
+#group_df["inactive_mean"] = pd.to_numeric(group_df["inactive_mean"], errors="coerce")
 
 # Write combined table with all data
 combined_csv_path = summary_output_dir / "group_summary_combined.csv"
 group_df.to_csv(combined_csv_path, index=False)
 print(f"Wrote combined summary to: {combined_csv_path}")
 
-write_participant_active_inactive_plot(group_df, summary_output_dir)
+#write_participant_active_inactive_plot(group_df, summary_output_dir)
 
 # Compute means of numeric columns
 group_means = group_df.mean(numeric_only=True).round(4)
@@ -100,7 +219,7 @@ print(f"Wrote group means to: {group_means_csv_path}")
 if not shape_detection_times_files:
     print("\nNo participant shape detection time CSV files found.")
 else:
-    shape_detection_times_files = sorted(shape_detection_times_files)
+    shape_detection_times_files = sorted(shape_detection_times_files, key=lambda path: participant_sort_value(path.parent.name))
     print("\nFound shape detection time files:")
     print("\n".join(str(path) for path in shape_detection_times_files))
 
@@ -141,3 +260,9 @@ else:
     group_shape_detection_times_csv_path = summary_output_dir / "group_shape_detection_times_means.csv"
     group_shape_detection_times.to_csv(group_shape_detection_times_csv_path, index=False)
     print(f"Wrote group shape detection times to: {group_shape_detection_times_csv_path}")
+
+if not threshold_detection_summary_files:
+    print("\nNo participant threshold detection summary CSV files found.")
+else:
+    print("\n".join(str(path) for path in sorted(threshold_detection_summary_files, key=lambda path: participant_sort_value(path.parent.name))))
+    write_group_threshold_detection_summary(threshold_detection_summary_files, summary_output_dir)

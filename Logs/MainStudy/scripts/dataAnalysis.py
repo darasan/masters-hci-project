@@ -243,10 +243,8 @@ def extract_shape_depth_mm(shape_value):
     return depth_value if "." in depth_text else depth_value / 100
 
 
-def build_reversal_threshold_lines(shape_detection):
-    threshold_lines = []
-    seen_threshold_lines = set()
-    threshold_values = []
+def calculate_reversal_thresholds(shape_detection, expected_reversals=8):
+    thresholds_by_reversal = {}
     last_detected_shape = None
     current_reversal = None
 
@@ -256,25 +254,61 @@ def build_reversal_threshold_lines(shape_detection):
         elif status == "Detected":
             last_detected_shape = shape_value
         elif status == "Not detected" and current_reversal is not None and last_detected_shape is not None:
-            reversal_value = current_reversal
-            if reversal_value.startswith("Rev"):
-                reversal_value = reversal_value[len("Rev"):]
-            threshold_line = f"Reversal {reversal_value} threshold: {last_detected_shape}"
-            if threshold_line not in seen_threshold_lines:
-                threshold_lines.append(threshold_line)
-                seen_threshold_lines.add(threshold_line)
-                threshold_value = extract_shape_depth_mm(last_detected_shape)
-                if threshold_value is not None:
-                    threshold_values.append(threshold_value)
+            reversal_match = re.search(r"\d+", str(current_reversal))
+            if not reversal_match:
+                continue
 
-    if threshold_values:
-        mean_threshold = statistics.mean(threshold_values)
+            reversal_number = int(reversal_match.group(0))
+            threshold_value = extract_shape_depth_mm(last_detected_shape)
+            if (
+                threshold_value is None
+                or reversal_number < 1
+                or reversal_number > expected_reversals
+                or reversal_number in thresholds_by_reversal
+            ):
+                continue
+
+            thresholds_by_reversal[reversal_number] = {
+                "shape": last_detected_shape,
+                "threshold_mm": threshold_value,
+            }
+
+    threshold_values = [
+        thresholds_by_reversal[reversal_number]["threshold_mm"]
+        for reversal_number in range(1, expected_reversals + 1)
+        if reversal_number in thresholds_by_reversal
+    ]
+    mean_threshold = statistics.mean(threshold_values) if threshold_values else None
+
+    return thresholds_by_reversal, mean_threshold
+
+
+def build_reversal_threshold_lines(shape_detection, expected_reversals=8):
+    threshold_lines = []
+    thresholds_by_reversal, mean_threshold = calculate_reversal_thresholds(
+        shape_detection,
+        expected_reversals=expected_reversals,
+    )
+
+    for reversal_number in range(1, expected_reversals + 1):
+        threshold_info = thresholds_by_reversal.get(reversal_number)
+        if threshold_info is not None:
+            threshold_lines.append(
+                f"Reversal {reversal_number} threshold: {threshold_info['shape']}"
+            )
+
+    if mean_threshold is not None:
         threshold_lines.append(
             (
-                f"Mean detection threshold across {len(threshold_values)}/8 reversals: "
+                f"\nMean detection threshold across {len(thresholds_by_reversal)}/{expected_reversals} reversals: "
                 f"{mean_threshold:.4f} mm",
                 True,
             )
+        )
+
+        print(
+            f"\n\nMean detection threshold across "
+            f"{len(thresholds_by_reversal)}/{expected_reversals} reversals: {mean_threshold:.4f}mm"
         )
 
     return threshold_lines
@@ -821,6 +855,35 @@ def write_shape_detection_times_to_csv(shape_detection, output_path):
     avg_detection_times_df.to_csv(output_path, index=False)
     print("Wrote shape detection times to CSV: ", output_path)
 
+def build_threshold_detection_summary_df(shape_detection, expected_reversals=8):
+    thresholds_by_reversal, mean_threshold = calculate_reversal_thresholds(
+        shape_detection,
+        expected_reversals=expected_reversals,
+    )
+    columns = ["participant_id"] + [
+        f"reversal_{reversal_number}"
+        for reversal_number in range(1, expected_reversals + 1)
+    ] + ["mean_threshold"]
+
+    threshold_row = {"participant_id": participant_id}
+    for reversal_number in range(1, expected_reversals + 1):
+        column_name = f"reversal_{reversal_number}"
+        threshold_info = thresholds_by_reversal.get(reversal_number)
+        threshold_row[column_name] = (
+            round(threshold_info["threshold_mm"], 4)
+            if threshold_info is not None
+            else np.nan
+        )
+
+    threshold_row["mean_threshold"] = round(mean_threshold, 4) if mean_threshold is not None else np.nan
+
+    return pd.DataFrame([threshold_row], columns=columns)
+
+def write_threshold_detection_summary(shape_detection, csv_output_path):
+    threshold_summary_df = build_threshold_detection_summary_df(shape_detection)
+    threshold_summary_df.to_csv(csv_output_path, index=False, float_format="%.4f")
+    print("Wrote threshold detection summary to CSV: ", csv_output_path)
+
 ##################################################
 ################### Main program #################
 ##################################################
@@ -860,6 +923,7 @@ if __name__ == "__main__":
     summary_pdf_output_path = os.path.normpath(os.path.join(sys.argv[1], "Summary_graphs.pdf"))
     summary_csv_output_path = os.path.normpath(os.path.join(sys.argv[1], "Summary_stats.csv"))
     shape_detection_times_output_path = os.path.normpath(os.path.join(sys.argv[1], "Shape_detection_times.csv"))
+    threshold_detection_summary_output_path = os.path.normpath(os.path.join(sys.argv[1], "threshold_detection_summary.csv"))
 
     #Store all statistics for each run to CSV. To compare for full participant group later
     summary_all_runs = []
@@ -893,6 +957,10 @@ if __name__ == "__main__":
         #Write summary of all runs to CSV
         write_summary_to_csv(summary_all_runs, summary_csv_output_path)
         write_shape_detection_times_to_csv(shape_detection, shape_detection_times_output_path)
+        write_threshold_detection_summary(
+            shape_detection,
+            threshold_detection_summary_output_path,
+        )
 
         #TODO write overall summary page (total mdev avg for active/inactive, detection thresh)
         plt.close(pdf_fig)
