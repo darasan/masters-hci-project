@@ -851,7 +851,8 @@ def write_csv_png(input_csv, position_df, summary, png_fig, figures_output_dir, 
     input_dir = os.path.dirname(os.path.abspath(input_csv))
     base_name = os.path.splitext(os.path.basename(input_csv))[0]
 
-    output_csv_path = os.path.join(processed_output_dir,"cleaned", f"{base_name}_clean.csv")
+    #Cleaned files contain only position data, no other logged events
+    output_csv_path = os.path.join(processed_output_dir,"cleaned_pos", f"{base_name}_pos_only.csv")
     position_df.to_csv(output_csv_path, index=False)
     print(f"Wrote CSV file to: {output_csv_path}")
 
@@ -953,7 +954,7 @@ if __name__ == "__main__":
 
     figures_output_dir = os.path.normpath(os.path.join(input_dir, "..", "figures"))
     processed_output_dir = os.path.normpath(os.path.join(input_dir, "..", "processed"))
-    cleaned_output_dir = os.path.normpath(os.path.join(processed_output_dir, "cleaned"))
+    cleaned_output_dir = os.path.normpath(os.path.join(processed_output_dir, "cleaned_pos"))
 
     participant_id = os.path.splitext(os.path.basename(sys.argv[1]))[0]
     print("participant_id: ", participant_id)
