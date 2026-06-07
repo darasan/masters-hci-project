@@ -172,6 +172,115 @@ def write_group_threshold_detection_summary(threshold_detection_summary_files, o
     plt.close(fig)
     print(f"Wrote group threshold detection summary table to: {png_output_path}")
 
+def write_statistics_by_shape_depth_table_png(group_statistics_by_shape_depth_means, output_dir):
+    # Prepare display labels and format numeric values consistently for the table image.
+    display_df = group_statistics_by_shape_depth_means.copy()
+    display_df.columns = ["Shape depth", "mdev", "Avg detection time", "Num detections"]
+    display_df = display_df.fillna("")
+
+    for col in display_df.columns[1:]:
+        display_df[col] = display_df[col].apply(
+            lambda value: "" if value == "" else f"{float(value):.4f}"
+        )
+
+    # Size the figure based on row count so the table remains readable as shapes are added.
+    fig_height = max(2.0, 0.35 * len(display_df) + 0.8)
+    fig, ax = plt.subplots(figsize=(7.5, fig_height))
+    ax.axis("off")
+
+    table = ax.table(
+        cellText=display_df.values,
+        colLabels=display_df.columns,
+        cellLoc="center",
+        colWidths=[0.24, 0.18, 0.32, 0.22],
+        loc="center",
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(8)
+    table.scale(1, 1.3)
+
+    # Apply simple publication-friendly styling: bold header, light borders, compact padding.
+    for (row, col), cell in table.get_celld().items():
+        cell.PAD = 0.02
+        cell.set_edgecolor("#4a4a4a")
+        cell.set_linewidth(0.6)
+        if row == 0:
+            cell.set_facecolor("#e8e8e8")
+            cell.set_text_props(weight="bold")
+        else:
+            cell.set_facecolor("white")
+
+    png_output_path = output_dir / "statistics_by_shape_depth_group_means_table.png"
+    fig.savefig(png_output_path, bbox_inches="tight", dpi=300)
+    plt.close(fig)
+    print(f"Wrote group means by shape depth table to: {png_output_path}")
+
+def write_statistics_by_shape_depth_plot_png(group_statistics_by_shape_depth_df, output_dir):
+    def confidence_interval_95(values):
+        values = values.dropna()
+        if len(values) < 2:
+            return 0.0
+        return stats.t.ppf(0.975, len(values) - 1) * stats.sem(values)
+
+    plot_df = (
+        group_statistics_by_shape_depth_df
+        .groupby("shape_depth")
+        .agg(
+            mdev=("mdev", "mean"),
+            mdev_ci=("mdev", confidence_interval_95),
+            avg_detection_time=("avg_detection_time", "mean"),
+            avg_detection_time_ci=("avg_detection_time", confidence_interval_95),
+        )
+        .reset_index()
+        .round(4)
+    )
+    plot_df = sort_by_shape_depth(plot_df)
+    plot_df = plot_df.iloc[::-1].reset_index(drop=True)
+
+    x_positions = list(range(len(plot_df)))
+    fig, ax_mdev = plt.subplots(figsize=(8, 5))
+    ax_detection_time = ax_mdev.twinx()
+
+    mdev_plot = ax_mdev.errorbar(
+        x_positions,
+        plot_df["mdev"],
+        yerr=plot_df["mdev_ci"],
+        marker="o",
+        capsize=4,
+        label="mdev",
+        color="#5ea0ca",
+    )
+    detection_time_plot = ax_detection_time.errorbar(
+        x_positions,
+        plot_df["avg_detection_time"],
+        yerr=plot_df["avg_detection_time_ci"],
+        marker="o",
+        capsize=4,
+        label="Avg detection time",
+        color="#fea858",
+    )
+
+    ax_mdev.set_xlabel("Shape depth")
+    ax_mdev.set_ylabel("mdev")
+    ax_detection_time.set_ylabel("Avg detection time")
+    ax_mdev.xaxis.label.set_weight("bold")
+    ax_mdev.yaxis.label.set_weight("bold")
+    ax_detection_time.yaxis.label.set_weight("bold")
+    ax_mdev.set_xticks(x_positions)
+    ax_mdev.set_xticklabels(plot_df["shape_depth"])
+    ax_mdev.legend(
+        [mdev_plot, detection_time_plot],
+        ["mdev", "Avg detection time"],
+        loc="upper left",
+    )
+
+    fig.tight_layout()
+
+    png_output_path = output_dir / "statistics_by_shape_depth_group_means_plot.png"
+    fig.savefig(png_output_path, dpi=300)
+    plt.close(fig)
+    print(f"Wrote group means by shape depth plot to: {png_output_path}")
+
 def write_group_statistics_by_shape_depth(statistics_by_shape_depth_files, output_dir):
     statistics_dfs = []
 
@@ -217,6 +326,9 @@ def write_group_statistics_by_shape_depth(statistics_by_shape_depth_files, outpu
     means_csv_path = output_dir / "statistics_by_shape_depth_group_means.csv"
     group_statistics_by_shape_depth_means.to_csv(means_csv_path, index=False, float_format="%.4f")
     print(f"Wrote group means by shape depth to: {means_csv_path}")
+
+    write_statistics_by_shape_depth_table_png(group_statistics_by_shape_depth_means, output_dir)
+    write_statistics_by_shape_depth_plot_png(group_statistics_by_shape_depth_df, output_dir)
 
 #Root dir is "data" with all participants directories inside. Iterate over these to build summary
 root_dir = Path(os.path.normpath(os.path.join(os.getcwd(), "..", "data")))
