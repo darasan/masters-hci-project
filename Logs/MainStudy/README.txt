@@ -14,7 +14,7 @@ Results will be stored in the created "processed" folder
 Run "python dataAnalysis.py ..\data\Main_Study\P_ID".
 Outputs individual graphs in "figures", also summary PDF and CSV for data.
 
-## Group analysis ##
-Run "python GroupAnalysis.py". Outputs a CSV with combined stats and a CSV with means for all participants combined.
+## Group summary ##
+Run "python groupSummary.py". Outputs a CSV with combined stats and a CSV with means for all participants combined.
 
 
