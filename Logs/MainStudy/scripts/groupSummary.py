@@ -331,11 +331,10 @@ def write_group_statistics_by_shape_depth(statistics_by_shape_depth_files, outpu
     write_statistics_by_shape_depth_plot_png(group_statistics_by_shape_depth_df, output_dir)
 
 #Root dir is "data" with all participants directories inside. Iterate over these to build summary
-root_dir = Path(os.path.normpath(os.path.join(os.getcwd(), "..", "data")))
+root_dir = Path(os.path.normpath(os.path.join(os.getcwd(), "..", "data", "Main_study")))
 summary_output_dir = Path(os.path.join(os.getcwd(),"..", "Summary"))
 os.makedirs(summary_output_dir, exist_ok=True)
 
-#print("root_dir: ", root_dir)
 
 #Match on this filename for each participant
 summary_pattern = "Summary_stats.csv"
