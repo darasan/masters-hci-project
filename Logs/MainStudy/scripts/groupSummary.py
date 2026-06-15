@@ -37,6 +37,35 @@ def sort_by_shape_depth(df):
     )
 
 
+def write_group_mdev_plot(group_means, output_dir):
+    mdev_means = group_means.reindex(["mdev", "mdev_active"]).dropna()
+    if mdev_means.empty:
+        print("\nNo mdev mean values found for group plot.")
+        return
+
+    display_labels = ["Overall mdev", "Shape active mdev"][:len(mdev_means)]
+    ax = mdev_means.plot(
+        kind="bar",
+        figsize=(5, 4),
+        color=["#5ea0ca", "#fea858"][:len(mdev_means)],
+        legend=False,
+    )
+
+    ax.set_xticklabels(display_labels, rotation=0)
+    ax.set_ylabel("mdev (metres)", fontweight="bold")
+    ax.set_xlabel("")
+
+    for index, value in enumerate(mdev_means):
+        ax.text(index, value, f"{value:.4f}", ha="center", va="bottom")
+
+    plt.tight_layout()
+
+    plot_output_path = output_dir / "group_mdev_vs_active_mdev.png"
+    plt.savefig(plot_output_path, dpi=300)
+    plt.close()
+    print(f"Wrote group mdev plot to: {plot_output_path}")
+
+
 def write_participant_active_inactive_plot(group_df, output_dir):
     participant_means = (
         group_df
@@ -89,9 +118,7 @@ def write_group_threshold_detection_summary(threshold_detection_summary_files, o
 
     group_threshold_df = pd.concat(threshold_dfs, ignore_index=True)
     group_threshold_df = sort_by_participant_id(group_threshold_df)
-    group_threshold_df = group_threshold_df[
-        ["participant_id"] + [f"reversal_{i}" for i in range(1, 9)] + ["mean_threshold"]
-    ]
+    group_threshold_df = group_threshold_df[["participant_id", "mean_threshold"]]
 
     threshold_cols = [col for col in group_threshold_df.columns if col != "participant_id"]
     group_threshold_df[threshold_cols] = group_threshold_df[threshold_cols].apply(
@@ -130,7 +157,7 @@ def write_group_threshold_detection_summary(threshold_detection_summary_files, o
 
     #Create table and write to PNG
     display_df = group_threshold_df.copy()
-    display_df.columns = ["ID"] + [f"Rev {i}" for i in range(1, 9)] + ["Mean"]
+    display_df.columns = ["Participant\nID", "Mean detection\nthreshold (mm)"]
     display_df = display_df.fillna("")
 
     for col in display_df.columns[1:]:
@@ -139,10 +166,10 @@ def write_group_threshold_detection_summary(threshold_detection_summary_files, o
         )
 
     fig_height = max(2.0, 0.35 * len(display_df) + 0.8)
-    fig, ax = plt.subplots(figsize=(9.5, fig_height))
+    fig, ax = plt.subplots(figsize=(4.5, fig_height))
     ax.axis("off")
 
-    col_widths = [0.065] + [0.081] * 8 + [0.09]
+    col_widths = [0.3, 0.55]
     table = ax.table(
         cellText=display_df.values,
         colLabels=display_df.columns,
@@ -152,7 +179,7 @@ def write_group_threshold_detection_summary(threshold_detection_summary_files, o
     )
     table.auto_set_font_size(False)
     table.set_fontsize(7.5)
-    table.scale(1, 1.3)
+    table.scale(1, 1.45)
 
     for (row, col), cell in table.get_celld().items():
         cell.PAD = 0.02
@@ -247,7 +274,7 @@ def write_statistics_by_shape_depth_plot_png(group_statistics_by_shape_depth_df,
         yerr=plot_df["mdev_ci"],
         marker="o",
         capsize=4,
-        label="mdev",
+        label="mdev (metres)",
         color="#5ea0ca",
     )
     detection_time_plot = ax_detection_time.errorbar(
@@ -256,13 +283,13 @@ def write_statistics_by_shape_depth_plot_png(group_statistics_by_shape_depth_df,
         yerr=plot_df["avg_detection_time_ci"],
         marker="o",
         capsize=4,
-        label="Avg detection time",
+        label="Avg detection time (s)",
         color="#fea858",
     )
 
     ax_mdev.set_xlabel("Shape depth")
-    ax_mdev.set_ylabel("mdev")
-    ax_detection_time.set_ylabel("Avg detection time")
+    ax_mdev.set_ylabel("mdev (metres)")
+    ax_detection_time.set_ylabel("Avg detection time (s)")
     ax_mdev.xaxis.label.set_weight("bold")
     ax_mdev.yaxis.label.set_weight("bold")
     ax_detection_time.yaxis.label.set_weight("bold")
@@ -390,6 +417,7 @@ group_means_df.columns = ["metric", "mean"]
 group_means_csv_path = summary_output_dir / "group_summary_means.csv"
 group_means_df.to_csv(group_means_csv_path, index=False)
 print(f"Wrote group means to: {group_means_csv_path}")
+write_group_mdev_plot(group_means, summary_output_dir)
 
 if not statistics_by_shape_depth_files:
     print("\nNo participant statistics by shape depth CSV files found.")
