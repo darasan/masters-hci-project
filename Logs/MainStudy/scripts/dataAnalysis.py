@@ -19,6 +19,7 @@ ISO_REFERENCE_START_BEFORE_SIGN_M = 30.0
 ISO_REFERENCE_END_BEFORE_SIGN_M = 20.0
 POSITION_COLUMNS = ["Timestamp", "Meters", "LateralPos", "currentLane", "targetLane"]
 SIGN_POSITION_LOG_LABEL = "Created signal at x ="
+REVERSAL_STABILITY_WINDOW_SECONDS = 5.0
 
 
 def diagnose_lct_data(df):
@@ -209,6 +210,23 @@ def filter_reversal_events(shape_events):
     return filtered_events
 
 
+def filter_reversal_events_simple(reversal_events, stable_window_seconds=REVERSAL_STABILITY_WINDOW_SECONDS, end_time=None):
+    filtered_events = []
+
+    for i, event in enumerate(reversal_events):
+        timestamp, reversal_value = event
+        next_timestamp = reversal_events[i + 1][0] if i + 1 < len(reversal_events) else end_time
+
+        if next_timestamp is None:
+            filtered_events.append(event)
+            continue
+
+        if next_timestamp - timestamp >= stable_window_seconds:
+            filtered_events.append(event)
+
+    return filtered_events
+
+
 def get_shape_detection_duration(timestamp, shape_intervals):
     for start, end in shape_intervals:
         if start <= timestamp <= end:
@@ -218,19 +236,46 @@ def get_shape_detection_duration(timestamp, shape_intervals):
 
 def extract_shape_detection_events(raw_df, shape_intervals):
     shape_events = []
+    reversal_events = []
 
     for _, row in raw_df.iterrows():
         if row["Col2"] == "Confirmed that detected shape:":
             detection_duration = get_shape_detection_duration(row["Timestamp"], shape_intervals)
-            shape_events.append(("Detected", row["Col3"], detection_duration))
+            shape_events.append((row["Timestamp"], "Detected", row["Col3"], detection_duration))
         elif row["Col2"] == "Could not detect shape:":
-            shape_events.append(("Not detected", row["Col3"], None))
+            shape_events.append((row["Timestamp"], "Not detected", row["Col3"], None))
         elif row["Col2"] == "Change current shape to:":
-            shape_events.append(("Change current shape to", row["Col3"], None))
+            shape_events.append((row["Timestamp"], "Change current shape to", row["Col3"], None))
         elif row["Col2"] == "Change current reversal to:":
-            shape_events.append(("Change current reversal to", row["Col3"], None))
+            reversal_events.append((row["Timestamp"], row["Col3"]))
 
-    return filter_reversal_events(shape_events)
+    end_time = raw_df["Timestamp"].max() if not raw_df.empty else None
+    filtered_reversal_events = filter_reversal_events_simple(
+        reversal_events,
+        end_time=end_time,
+    )
+
+    filtered_events = []
+    current_reversal = None
+    reversal_idx = 0
+
+    combined_events = [
+        (timestamp, "Change current reversal to", reversal_value, None)
+        for timestamp, reversal_value in filtered_reversal_events
+    ] + shape_events
+    combined_events.sort(key=lambda event: event[0])
+
+    for timestamp, status, shape_value, detection_duration in combined_events:
+        while (
+            reversal_idx < len(filtered_reversal_events)
+            and filtered_reversal_events[reversal_idx][0] <= timestamp
+        ):
+            current_reversal = filtered_reversal_events[reversal_idx][1]
+            reversal_idx += 1
+
+        filtered_events.append((status, shape_value, detection_duration, current_reversal))
+
+    return filtered_events
 
 
 def extract_shape_depth_mm(shape_value):
@@ -240,7 +285,7 @@ def extract_shape_depth_mm(shape_value):
 
     depth_text = match.group(1)
     depth_value = float(depth_text)
-    return depth_value if "." in depth_text else depth_value / 100
+    return depth_value if "." in depth_text else depth_value / 10
 
 
 def calculate_reversal_thresholds(shape_detection, expected_reversals=8):
@@ -248,7 +293,7 @@ def calculate_reversal_thresholds(shape_detection, expected_reversals=8):
     last_detected_shape = None
     current_reversal = None
 
-    for status, shape_value, _ in shape_detection:
+    for status, shape_value, *_ in shape_detection:
         if status == "Change current reversal to":
             current_reversal = shape_value
         elif status == "Detected":
@@ -352,7 +397,7 @@ def build_detection_times_by_shape(shape_detection):
             "shape_depth": shape_depth,
             "avg_detection_time": detection_duration,
         }
-        for status, shape_depth, detection_duration in shape_detection
+        for status, shape_depth, detection_duration, _ in shape_detection
         if status == "Detected" and detection_duration is not None
     ]
 
@@ -382,6 +427,9 @@ def build_statistics_by_shape_depth(shape_detection, all_summaries):
         on="shape_depth",
         how="outer",
     )
+    statistics_by_shape_depth = statistics_by_shape_depth[
+        statistics_by_shape_depth["shape_depth"] != "Flat"
+    ].reset_index(drop=True)
 
     if statistics_by_shape_depth.empty:
         return pd.DataFrame(columns=["shape_depth", "mdev", "avg_detection_time", "num_detections"])
@@ -570,9 +618,11 @@ def analyze_lct_data(raw_df, position_df,shape_detection, run_diagnostics=True):
             else:
                 current_shape = shape_text
 
-            if row["Col3"] == "True":
+            prompt_value = str(row["Col3"]).lower()
+
+            if prompt_value == "true":
                 start_time = row["Timestamp"]
-            elif row["Col3"] == "False" and start_time is not None:
+            elif prompt_value == "false" and start_time is not None:
                 shape_intervals.append((start_time, row["Timestamp"]))
                 mask = (position_df["Timestamp"] >= start_time) & (position_df["Timestamp"] <= row["Timestamp"])
                 position_df.loc[mask, "shape_active"] = 1
@@ -599,8 +649,20 @@ def analyze_lct_data(raw_df, position_df,shape_detection, run_diagnostics=True):
         mdev_by_shape["mdev"] = mdev_by_shape["mdev"].round(4)
 
     shape_detection.extend(extract_shape_detection_events(raw_df, shape_intervals))
-            
-    print("Detected shapes: ",shape_detection)
+
+    print("Detected shapes:")
+    for status, shape_value, detection_duration, current_reversal in shape_detection:
+        duration_text = (
+            f"{detection_duration:.2f}s"
+            if detection_duration is not None
+            else "n/a"
+        )
+        reversal_text = current_reversal if current_reversal is not None else "n/a"
+        print(
+            f"  - {status}: {shape_value} "
+            f"| duration: {duration_text} "
+            f"| reversal: {reversal_text}"
+        )
 
     #Round all numeric data
     cols_to_round = ["Timestamp", "Meters", "LateralPos", "target_pos_smooth", "deviation_m"]
@@ -763,11 +825,14 @@ def build_pdf_summary_pages(shape_detection, statistics_by_shape_depth=None, inc
         for wrapped_line in wrapped_lines or [line_text]:
             summary_lines.append((wrapped_line, bold))
 
-    for detected, depth, duration in shape_detection:
+    for detected, depth, duration, current_reversal in shape_detection:
         if duration is None:
             event_text = f"{detected}: {depth}"
         else:
             event_text = f"{detected}: {depth} ({duration:.2f}s)"
+
+        if current_reversal is not None:
+            event_text = f"{event_text} [{current_reversal}]"
 
         add_summary_line(event_text)
 
@@ -818,14 +883,13 @@ def build_pdf_summary_pages(shape_detection, statistics_by_shape_depth=None, inc
     #List of depths detected during the run. TODO move to other analysis? 
     detected_depths = []
     prefix = "Square"
-    for detected, depth, duration in shape_detection:
+    for detected, depth, duration, _ in shape_detection:
         if detected == "Detected" and depth.startswith(prefix):
             #Extract the depth value from the string in the log
             detected_depths.append(int(depth[len(prefix):len(prefix)+2]))
     
     mean_detected_depth = round(statistics.mean(detected_depths), 4) if detected_depths else None
-    #TODO not really true though? Should be based on reversals otherwise skewed with first detections from 7 - 5. Threshold is the one above the reversal (if cant detect 2 then its 3 etc). Do later
-    
+
     print("detected_depths: ", detected_depths)
     print("Mean detected depth: ", mean_detected_depth)
 
@@ -969,6 +1033,7 @@ if __name__ == "__main__":
     #Get matching files
     pattern = "*.csv"
     input_files = sorted(input_dir.glob(pattern))
+    print("input_files: ", input_files)
    
     #Process all files for the participant, store summary with graphs in single PDF, CSV for statistics
     summary_pdf_output_path = os.path.normpath(os.path.join(sys.argv[1], "Summary_graphs.pdf"))
